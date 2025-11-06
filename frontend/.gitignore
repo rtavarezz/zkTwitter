@@ -1,0 +1,15 @@
+../node_modules
+dist/
+.DS_Store
+*.log
+*.lock
+*.tmp
+*.swp
+.env
+.env.*
+server/dist/
+frontend/dist/
+server/node_modules/
+frontend/node_modules/
+server/.env
+frontend/.env

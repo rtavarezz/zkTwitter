@@ -1,0 +1,14 @@
+node_modules
+dist
+.env
+*.db
+*.db-journal
+*.log
+.DS_Store
+*.swp
+*.swo
+.vscode
+.idea
+coverage
+*.tsbuildinfo
+test-proof.json
