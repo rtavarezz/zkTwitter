@@ -253,12 +253,14 @@ Generation Circuit → outputs Gen Z proof
 
 ---
 
+```mermaid
 flowchart LR
     User --> SelfTEE[Self TEE]
     SelfTEE --> Registry[On-chain Registry]
     Registry --> Backend[zkTwitter Backend]
     Backend --> Circuit[Generation ZK Circuit]
     Circuit --> JWT[Session Token / Verified Badge]
+```
 
 ---
 
