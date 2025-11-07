@@ -138,33 +138,58 @@ router.get('/proof-data', requireAuth, async (req: AuthenticatedRequest, res, ne
   }
 });
 
-// Step 4: callback once the Groth16 proof is ready; burns the nonce and stamps the badge.
+/**
+ * Backend verification endpoint for social proofs.
+ *
+ * Flow:
+ * 1. Frontend (SocialProof.tsx) generates proof client-side using socialProof.circom
+ * 2. Proof + public signals sent to this endpoint
+ * 3. We cryptographically verify the proof with snarkjs (Groth16 verification)
+ * 4. Extract isQualified, claimHash, selfNullifier from public signals
+ * 5. Validate Merkle root matches snapshot (prevents tree manipulation)
+ * 6. Validate nullifier binding (prevents proof stealing)
+ * 7. Burn session nonce (prevents replay attacks)
+ * 8. Store social proof level in DB WITHOUT storing which users (privacy preserved)
+ *
+ * Security: Followee identities never leave the client. We only store the count they proved.
+ */
 router.post('/verify', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
     if (!req.auth?.sub) {
       return res.status(401).json({ error: 'Authentication required' });
     }
 
+    // Step 1: Parse and validate request
     logger.info({ userId: req.auth.sub }, '[SOCIAL STEP 7] Received proof from client, verifying...');
     const { proof, publicSignals } = verifyRequestSchema.parse(req.body);
     const config = await getSocialConfig();
+
+    // Step 2: Cryptographically verify Groth16 proof using snarkjs
+    // This proves the circuit was executed correctly with valid Merkle proofs
     const signals = await verifySocialProof(proof as unknown as Groth16Proof, publicSignals);
 
     logger.info({ userId: req.auth.sub, isQualified: signals.isQualified }, '[SOCIAL STEP 8] ZK proof verified');
 
+    // Step 3: Check circuit output isQualified flag (TRUST THE CIRCUIT)
+    // Circuit validates that user has >= minVerifiedNeeded followees in the Merkle tree
     if (signals.isQualified !== '1') {
       return res.status(400).json({ error: 'ZK circuit did not meet threshold' });
     }
 
+    // Step 4: Verify Merkle root matches our snapshot (prevents tree manipulation)
     if (signals.verifiedRoot !== config.verifiedRoot) {
       return res.status(400).json({ error: 'Verified root mismatch' });
     }
 
+    // Step 5: Verify threshold matches config (prevents changing requirements)
     if (signals.minVerifiedNeeded !== BigInt(config.minVerifiedNeeded)) {
       return res.status(400).json({ error: 'Threshold mismatch' });
     }
 
+    // Step 6: Atomic DB transaction to validate and store proof
     await prisma.$transaction(async (tx) => {
+      // DB query: SELECT * FROM UsedNonce WHERE sessionNonce = signals.sessionNonce
+      // Verify session nonce exists and hasn't been used (prevents replay)
       const nonceRecord = await tx.usedNonce.findUnique({
         where: { sessionNonce: signals.sessionNonce },
       });
@@ -173,8 +198,12 @@ router.post('/verify', requireAuth, async (req: AuthenticatedRequest, res, next)
         throw new Error('Unknown or reused session nonce');
       }
 
+      // DB operation: DELETE FROM UsedNonce WHERE sessionNonce = signals.sessionNonce
+      // Burn nonce to prevent replay attacks
       await tx.usedNonce.delete({ where: { sessionNonce: signals.sessionNonce } });
 
+      // DB query: SELECT * FROM User WHERE id = userId
+      // Fetch user and validate identity binding
       const user = await tx.user.findUnique({ where: { id: req.auth!.sub } });
       if (!user) {
         throw new Error('User not found for proof submission');
@@ -184,15 +213,23 @@ router.post('/verify', requireAuth, async (req: AuthenticatedRequest, res, next)
         throw new Error('User missing stored self nullifier');
       }
 
+      // Verify selfNullifier matches (prevents proof stealing)
       if (user.selfNullifier !== signals.selfNullifier) {
         throw new Error('Self nullifier mismatch between proof and account');
       }
 
+      // Step 7: Save proof results to DB (TRUST CIRCUIT OUTPUT)
+      // DB operation: UPDATE User SET socialProofLevel, socialClaimHash, socialVerifiedAt
+      // What we store:
+      //   - socialProofLevel: Minimum verified follows proven (e.g., 5 means >= 5 verified)
+      //   - socialClaimHash: Binds proof to identity + session
+      //   - socialVerifiedAt: Timestamp of proof
+      // What we DON'T store: Which users they follow (never leaves client!)
       await tx.user.update({
         where: { id: user.id },
         data: {
-          socialProofLevel: config.minVerifiedNeeded,
-          socialClaimHash: signals.claimHash,
+          socialProofLevel: config.minVerifiedNeeded,  // Store count proven (e.g., >= 5 verified follows)
+          socialClaimHash: signals.claimHash,           // Binds proof to identity
           socialVerifiedAt: new Date(),
         },
       });
@@ -206,6 +243,11 @@ router.post('/verify', requireAuth, async (req: AuthenticatedRequest, res, next)
       'Social proof verified and badge issued'
     );
 
+    // Return success response (204 No Content)
+    // Frontend (SocialProof.tsx) receives success and:
+    //   1. Fetches updated user from GET /users/:handle
+    //   2. Updates local user context with socialProofLevel
+    //   3. Redirects to timeline where social badge now displays
     res.status(204).send();
   } catch (error) {
     next(error);

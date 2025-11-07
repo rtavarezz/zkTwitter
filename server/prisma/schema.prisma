@@ -7,20 +7,40 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// User model - Privacy-preserving storage for ZK proof outputs
+//
+// What we STORE (safe to store):
+// - birthYearCommitment: Cryptographic commitment Poseidon(birthYear, salt)
+// - generationId: Which generation they proved (0=GenZ, 1=Millennial, etc.)
+// - socialProofLevel: Minimum verified follows they proved (e.g., >= 5)
+//
+// What NEVER leaves the client (privacy preserved):
+// - Exact birth year (private input to circuit, never sent to backend)
+// - Which specific users they follow (private input to circuit, Merkle proofs only)
+//
+// Security model:
+// - selfNullifier: Binds proofs to this user's identity (prevents proof stealing)
+// - Claim hashes: Bind proofs to specific sessions (prevents replay)
+// - Commitments: Allow re-proving without revealing original private data
 model User {
   id           String    @id @default(uuid())
   handle       String    @unique
   selfNullifier String?  @unique // Self Protocol nullifier prevents duplicate passport registrations
   avatarUrl    String?
-  humanStatus  String
+  humanStatus  String    // 'verified' if passed Self proof-of-human
   disclosed    String    @default("{}")
+
+  // Generation proof fields (from circuits/generation/generationMembership.circom)
   birthYearCommitment String?     // Poseidon(birthYear, salt) - hides exact age
-  birthYearSalt       String?     // Salt for commitment (stored for re-proving)
-  generationId        Int?        // Proven generation: 0=GenZ, 1=Millennial, etc.
-  generationProofHash String?     // Claim hash from generation proof
-  socialProofLevel  Int     @default(0) // Minimum number of verified follows proven via ZK
-  socialClaimHash   String?
-  socialVerifiedAt  DateTime?
+  birthYearSalt       String?     // Salt for commitment (stored for re-proving same birth year)
+  generationId        Int?        // Proven generation: 0=GenZ, 1=Millennial, 2=GenX, 3=Boomer, 4=Silent
+  generationProofHash String?     // Claim hash from generation proof (binds to identity + session)
+
+  // Social proof fields (from circuits/social/socialProof.circom)
+  socialProofLevel  Int     @default(0) // Minimum verified follows proven (e.g., 5 means >= 5 verified)
+  socialClaimHash   String?              // Claim hash from social proof (binds to identity + session)
+  socialVerifiedAt  DateTime?            // When they last proved their social connections
+
   verifiedAt   DateTime?
   createdAt    DateTime  @default(now())
   tweets       Tweet[]
@@ -79,10 +99,12 @@ model Message {
   @@index([recipientId, senderId])
 }
 
+// Session nonces prevent replay attacks on ZK proofs
+// Each nonce is single-use: created in /context, burned in /verify
 model UsedNonce {
   id           String   @id @default(uuid())
-  scope        String
-  sessionNonce String   @unique
+  scope        String   // 'social' or 'generation' - which proof type
+  sessionNonce String   @unique  // One-time nonce from circuit public signals
   createdAt    DateTime @default(now())
 }
 

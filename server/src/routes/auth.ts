@@ -228,6 +228,9 @@ router.get('/login/status/:sessionId', async (req, res, next) => {
   }
 });
 
+// zkTwitter platform-wide minimum age requirement
+const ZKTWITTER_MINIMUM_AGE = 20;
+
 // Self webhook posts the attestation here; this is where I trust-but-verify their proof.
 router.post('/self/verify', verifyLimiter, async (req, res) => {
   try {
@@ -236,14 +239,34 @@ router.post('/self/verify', verifyLimiter, async (req, res) => {
     const result = await verifyProof(proofPayload);
     const { isValid, isMinimumAgeValid, isOfacValid } = result.isValidDetails;
 
-    if (!isValid || !isMinimumAgeValid || isOfacValid) {
+    // Debug: Log what Self is returning
+    logger.info({
+      isValid,
+      isMinimumAgeValid,
+      isOfacValid,
+      ofacRawData: result.discloseOutput?.ofac,
+    }, 'Self verification result details');
+
+    // Workaround for Self SDK bug: isOfacValid is false even when OFAC data shows [false, false, false]
+    // OFAC array: [false, false, false] = NOT on sanctions lists = should PASS
+    // OFAC array: [true, ...] = IS on a sanctions list = should REJECT
+    const ofacData = result.discloseOutput?.ofac || [];
+    const isActuallyOnSanctionsList = Array.isArray(ofacData) && ofacData.some((val) => val === true);
+
+    // Enforce platform-wide minimum age of 20+
+    if (!isValid || !isMinimumAgeValid || isActuallyOnSanctionsList) {
       const reason = !isValid
         ? 'Invalid proof'
         : !isMinimumAgeValid
-        ? 'Minimum age requirement not met'
-        : 'OFAC screening failed';
+        ? `Minimum age requirement not met (${ZKTWITTER_MINIMUM_AGE}+ required)`
+        : 'OFAC screening failed (passport on sanctions list)';
 
-      logger.warn({ reason }, 'Self verification rejected');
+      logger.warn({
+        reason,
+        minimumAgeRequired: ZKTWITTER_MINIMUM_AGE,
+        isActuallyOnSanctionsList,
+        ofacData
+      }, 'Self verification rejected');
 
       return res.status(200).json({
         status: 'error',
