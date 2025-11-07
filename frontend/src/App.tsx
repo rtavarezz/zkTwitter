@@ -2,6 +2,11 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { SelfApp } from '@selfxyz/qrcode'
 import Navbar from './components/Navbar'
+import DisclosureControls, {
+  DEFAULT_DISCLOSURE_OPTIONS,
+  buildSelfDisclosures,
+  type DisclosureOptions,
+} from './components/DisclosureControls'
 import { apiGet, apiPost } from './lib/api'
 import { ensureSelfEndpoint } from './config'
 import { useAuth } from './context/AuthContext'
@@ -22,6 +27,9 @@ export default function App() {
   const [selfApp, setSelfApp] = useState<SelfApp | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const [handle, setHandle] = useState<string>('')
+  const [disclosureOptions, setDisclosureOptions] = useState<DisclosureOptions>(
+    DEFAULT_DISCLOSURE_OPTIONS
+  )
   const [step, setStep] = useState<Step>('input')
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
@@ -56,6 +64,7 @@ export default function App() {
       setUserId(response.userId)
 
       const { SelfAppBuilder } = await import('@selfxyz/qrcode')
+      const disclosures = buildSelfDisclosures(disclosureOptions)
       const app = new SelfAppBuilder({
         version: 2,
         appName: 'zkTwitter',
@@ -70,11 +79,7 @@ export default function App() {
           handle: response.handle,
           userId: response.userId,
         }),
-        disclosures: {
-          excludedCountries: [],
-          ofac: true,
-          nationality: true,
-        },
+        disclosures,
       }).build()
 
       setSelfApp(app)
@@ -217,6 +222,7 @@ export default function App() {
                     }}
                   />
                 </div>
+                <DisclosureControls value={disclosureOptions} onChange={setDisclosureOptions} />
                 <button className="cta primary" onClick={() => void handleStartRegistration()}>
                   Generate verification QR
                 </button>
@@ -227,7 +233,7 @@ export default function App() {
                 <ul>
                   <li><span>1</span> Generate a QR that encodes the Self verification request.</li>
                   <li><span>2</span> Scan it with the Self mobile app (mock passport available for testing).</li>
-                  <li><span>3</span> Self verifies your passport, age ≥ 21, and sanctions status.</li>
+                  <li><span>3</span> Self verifies your passport and the checks you enabled (age, OFAC, etc.).</li>
                   <li><span>4</span> zkTwitter stores only your handle + green badge metadata.</li>
                 </ul>
               </div>
@@ -277,7 +283,7 @@ export default function App() {
                   <ul>
                     <li>@{handle}</li>
                     <li>Verified badge</li>
-                    <li>Country + 21+ flag</li>
+                    <li>Your chosen disclosure fields</li>
                   </ul>
                 </div>
                 <div>

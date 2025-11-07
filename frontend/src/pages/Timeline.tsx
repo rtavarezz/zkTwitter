@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import { apiGet, apiPost } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
@@ -17,6 +17,7 @@ interface User {
   avatarUrl: string | null
   humanStatus: 'verified' | 'unverified' | 'bot'
   disclosed: DisclosedInfo
+  generationId?: number | null
 }
 
 interface Tweet {
@@ -26,8 +27,17 @@ interface Tweet {
   user: User
 }
 
+const GENERATIONS = [
+  { id: 0, name: 'Gen Z' },
+  { id: 1, name: 'Millennial' },
+  { id: 2, name: 'Gen X' },
+  { id: 3, name: 'Boomer' },
+  { id: 4, name: 'Silent' },
+];
+
 export default function Timeline() {
   const { user, token, isVerified } = useAuth()
+  const navigate = useNavigate()
   const [tweets, setTweets] = useState<Tweet[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -36,23 +46,31 @@ export default function Timeline() {
   const [newTweet, setNewTweet] = useState('')
   const [posting, setPosting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [generationFilter, setGenerationFilter] = useState<number | null>(null)
 
   useEffect(() => {
     void refreshTweets()
     // eslint-disable-next-line
-  }, [])
+  }, [generationFilter])
 
 
   const refreshTweets = async (cursor?: string) => {
     const isPagination = Boolean(cursor)
     if (isPagination) setLoadingMore(true)
+    else setLoading(true)
 
     try {
+      let url = '/tweets'
+      const params = new URLSearchParams()
+      if (cursor) params.append('cursor', cursor)
+      if (generationFilter !== null) params.append('generation', generationFilter.toString())
+      if (params.toString()) url += `?${params.toString()}`
+
       const data = await apiGet<{
         tweets: Tweet[]
         hasMore: boolean
         nextCursor: string | null
-      }>(cursor ? `/tweets?cursor=${cursor}` : '/tweets')
+      }>(url)
 
       if (isPagination) {
         setTweets((prev) => [...prev, ...data.tweets])
@@ -129,11 +147,46 @@ export default function Timeline() {
     setTimeout(() => setError(null), 3000)
   }
 
+  const getGenerationName = (genId?: number | null) => {
+    if (genId === null || genId === undefined) return null
+    return GENERATIONS.find(g => g.id === genId)?.name
+  }
+
+  const handleGenerationFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value === '' ? null : parseInt(e.target.value)
+    // Anyone can filter by generation - it's a public filter
+    setGenerationFilter(value)
+  }
+
   return (
     <div className="timeline-page">
       <Navbar />
       <div className="timeline-shell">
         <section className="timeline-feed" aria-live="polite">
+          <div className="generation-filter">
+            <label htmlFor="gen-filter">Filter by generation:</label>
+            <select
+              id="gen-filter"
+              value={generationFilter === null ? '' : generationFilter}
+              onChange={handleGenerationFilterChange}
+            >
+              <option value="">All generations</option>
+              {GENERATIONS.map(gen => (
+                <option key={gen.id} value={gen.id}>{gen.name}</option>
+              ))}
+            </select>
+            {user && isVerified && (user.generationId === null || user.generationId === undefined) && (
+              <Link to="/generation-proof" className="cta secondary" style={{ marginLeft: 'auto' }}>
+                Prove Generation
+              </Link>
+            )}
+            {user && user.generationId !== null && user.generationId !== undefined && (
+              <span style={{ marginLeft: 'auto', color: '#94a3b8', fontSize: '0.9rem' }}>
+                Verified: {GENERATIONS.find(g => g.id === user.generationId)?.name}
+              </span>
+            )}
+          </div>
+
           {user && isVerified ? (
             <div className="composer">
               <img
@@ -185,6 +238,8 @@ export default function Timeline() {
               const isHuman = tweet.user.humanStatus === 'verified'
               const isBot = tweet.user.humanStatus === 'bot'
 
+              const genName = getGenerationName(tweet.user.generationId)
+
               return (
                 <article key={tweet.id} className="tweet-card">
                   <div className="tweet-avatar">
@@ -206,7 +261,7 @@ export default function Timeline() {
                     <footer>
                       {isHuman ? (
                         <span className="badge human">
-                          Verified {flag ? `• ${flag}` : ''}{disclosed.is21 ? ' • 21+' : ''}
+                          Verified {flag ? `• ${flag}` : ''}{disclosed.is21 ? ' • 21+' : ''}{genName ? ` • ${genName}` : ''}
                         </span>
                       ) : (
                         <span className="badge bot">Bot account</span>

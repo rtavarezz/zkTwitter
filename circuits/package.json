@@ -1,0 +1,20 @@
+{
+  "name": "zktwitter-circuits",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "compile": "cd scripts && ./compile.sh",
+    "setup": "cd scripts && ./setup.sh",
+    "build-input": "node scripts/buildWitness.mjs",
+    "prove": "cd scripts && ./prove.sh",
+    "test": "npm run compile && npm run build-input",
+    "test:generation": "node tests/generationMembership.test.mjs"
+  },
+  "dependencies": {
+    "circomlib": "^2.0.5",
+    "snarkjs": "^0.7.0"
+  },
+  "devDependencies": {
+    "circom_tester": "^0.0.19"
+  }
+}

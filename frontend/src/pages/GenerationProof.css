@@ -1,0 +1,185 @@
+.generation-proof-page {
+  min-height: 100vh;
+  background: radial-gradient(circle at top, rgba(99, 102, 241, 0.18), transparent 55%), #020617;
+  color: #f8fafc;
+}
+
+.generation-container {
+  max-width: 800px;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+.generation-container h1 {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+  color: #f8fafc;
+}
+
+.subtitle {
+  color: #94a3b8;
+  margin-bottom: 2rem;
+}
+
+.birth-year-info {
+  background: rgba(30, 41, 59, 0.8);
+  border: 1px solid rgba(94, 129, 244, 0.3);
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+  border-left: 3px solid #6366f1;
+  color: #f8fafc;
+}
+
+.error-banner {
+  background: #fee;
+  color: #c33;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 2rem;
+}
+
+.generation-selector {
+  margin-bottom: 2rem;
+}
+
+.generation-selector h3 {
+  margin-bottom: 1rem;
+  color: #f8fafc;
+}
+
+.generation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1rem;
+}
+
+.generation-card {
+  background: rgba(30, 41, 59, 0.8);
+  border: 2px solid rgba(148, 163, 184, 0.3);
+  border-radius: 8px;
+  padding: 1.5rem 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: center;
+  color: #f8fafc;
+}
+
+.generation-card:hover:not(:disabled) {
+  border-color: rgba(99, 102, 241, 0.8);
+  background: rgba(30, 41, 59, 1);
+  transform: translateY(-2px);
+}
+
+.generation-card.selected {
+  border-color: #6366f1;
+  background: rgba(99, 102, 241, 0.25);
+}
+
+.generation-card:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gen-name {
+  font-weight: 600;
+  font-size: 1.1rem;
+  margin-bottom: 0.5rem;
+  color: #f8fafc;
+}
+
+.gen-range {
+  color: #94a3b8;
+  font-size: 0.9rem;
+}
+
+.proof-steps {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(94, 129, 244, 0.3);
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  color: #f8fafc;
+}
+
+.proof-steps h4 {
+  margin-bottom: 1rem;
+  color: #f8fafc;
+}
+
+.proof-steps ul {
+  list-style: none;
+  padding: 0;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-size: 0.9rem;
+}
+
+.proof-steps li {
+  padding: 0.4rem 0;
+  color: #cbd5e1;
+}
+
+.proof-steps li:has(✓) {
+  color: #4ade80;
+}
+
+.proof-steps li:has(✗) {
+  color: #f87171;
+}
+
+.prove-button {
+  width: 100%;
+  padding: 1rem;
+  font-size: 1.1rem;
+  margin-bottom: 2rem;
+}
+
+.error-message {
+  background: #fee;
+  color: #c33;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.success-message {
+  background: #efe;
+  color: #3a3;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.info-box {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(94, 129, 244, 0.2);
+  padding: 1.5rem;
+  border-radius: 8px;
+  margin-top: 2rem;
+  color: #f8fafc;
+}
+
+.info-box h4 {
+  margin-bottom: 1rem;
+  color: #f8fafc;
+}
+
+.info-box ul {
+  list-style: none;
+  padding: 0;
+}
+
+.info-box li {
+  padding: 0.5rem 0;
+  padding-left: 1.5rem;
+  position: relative;
+  color: #cbd5e1;
+}
+
+.info-box li::before {
+  content: '✓';
+  position: absolute;
+  left: 0;
+  color: #6366f1;
+  font-weight: bold;
+}

@@ -9,6 +9,7 @@ import { verifyProof, SelfProofSchema } from '../services/selfService.js';
 import { decodeUserContextData } from '../utils/userContext.js';
 import { buildDisclosedPayload, safeParseDisclosed } from '../utils/disclosure.js';
 import { ensureMutualFollows } from '../services/socialGraph.js';
+import { maybeDumpSelfProof } from '../utils/selfProofDump.js';
 
 const router = Router();
 
@@ -234,6 +235,8 @@ router.post('/self/verify', verifyLimiter, async (req, res) => {
 
     const context = decodeUserContextData(proofPayload.userContextData);
 
+    await maybeDumpSelfProof({ proof: proofPayload, result, context });
+
     if (context.action === 'registration') {
       await upsertVerifiedUser({
         handle: context.handle,
@@ -275,6 +278,15 @@ router.post('/self/verify', verifyLimiter, async (req, res) => {
 
 type VerificationResult = Awaited<ReturnType<typeof verifyProof>>;
 
+function deriveBirthYear(dateOfBirth?: string | null): number | null {
+  if (!dateOfBirth || dateOfBirth.length < 6) return null;
+  const yearFragment = dateOfBirth.slice(-2);
+  const yy = Number.parseInt(yearFragment, 10);
+  if (Number.isNaN(yy)) return null;
+  const cutoff = 24; // assume passports <= 2124 use 20xx
+  return (yy <= cutoff ? 2000 : 1900) + yy;
+}
+
 async function upsertVerifiedUser(opts: {
   handle: string;
   userId: string;
@@ -284,37 +296,65 @@ async function upsertVerifiedUser(opts: {
 }) {
   const { handle, userId, avatarUrl, result, isMinimumAgeValid } = opts;
   const normalizedHandle = handle.toLowerCase();
+  const nullifier = result.discloseOutput?.nullifier?.toString();
+  const birthYear = deriveBirthYear(result.discloseOutput?.dateOfBirth);
 
-  const conflictingHandle = await prisma.user.findUnique({ where: { handle: normalizedHandle } });
+  if (!nullifier) {
+    throw new Error('Self nullifier missing from verification result');
+  }
+
+  logger.info(
+    {
+      handle: normalizedHandle,
+      nullifierPreview: `${nullifier.slice(0, 12)}...`,
+      dobRaw: result.discloseOutput?.dateOfBirth ?? null,
+      birthYear,
+    },
+    'Derived birth year + nullifier from Self verification payload'
+  );
+
+  const [existingNullifier, conflictingHandle] = await Promise.all([
+    prisma.user.findUnique({ where: { selfNullifier: nullifier } }),
+    prisma.user.findUnique({ where: { handle: normalizedHandle } }),
+  ]);
+
+  if (existingNullifier && existingNullifier.id !== userId) {
+    logger.warn({ nullifier, existingUserId: existingNullifier.id, attemptedUserId: userId },
+      'Duplicate passport blocked');
+    throw new Error('This passport has already been registered to another account');
+  }
+
   if (conflictingHandle && conflictingHandle.id !== userId) {
     throw new Error('Handle already belongs to another user');
   }
 
   const disclosed = buildDisclosedPayload(result.discloseOutput, isMinimumAgeValid);
+  const defaultAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${normalizedHandle}`;
 
   await prisma.user.upsert({
     where: { id: userId },
     update: {
       handle: normalizedHandle,
+      selfNullifier: nullifier,
       avatarUrl: avatarUrl ?? conflictingHandle?.avatarUrl,
       humanStatus: 'verified',
       disclosed: JSON.stringify(disclosed),
       verifiedAt: new Date(),
+      ...(birthYear ? { birthYear } : {}),
     },
     create: {
       id: userId,
       handle: normalizedHandle,
-      avatarUrl:
-        avatarUrl ??
-        `https://api.dicebear.com/7.x/avataaars/svg?seed=${normalizedHandle}`,
+      selfNullifier: nullifier,
+      avatarUrl: avatarUrl ?? defaultAvatar,
       humanStatus: 'verified',
       disclosed: JSON.stringify(disclosed),
       verifiedAt: new Date(),
+      birthYear,
     },
   });
 
   logger.info({ handle: normalizedHandle, userId }, 'User verified via Self');
-
   await ensureMutualFollows(userId);
 }
 
@@ -332,21 +372,31 @@ async function verifyLoginSession(opts: {
     include: { user: true },
   });
 
-  if (!session) {
-    throw new Error('Login session not found');
+  if (!session) throw new Error('Login session not found');
+  if (session.userId !== userId) throw new Error('Login session does not match user');
+  if (session.user.handle !== handle.toLowerCase()) throw new Error('Handle mismatch during login verification');
+
+  const nullifier = result.discloseOutput?.nullifier?.toString();
+
+  if (nullifier && session.user.selfNullifier && session.user.selfNullifier !== nullifier) {
+    logger.error({ sessionId, userId, stored: session.user.selfNullifier, provided: nullifier },
+      'Nullifier mismatch');
+    throw new Error('Passport verification mismatch');
   }
 
-  if (session.userId !== userId) {
-    throw new Error('Login session does not match user');
-  }
-
-  if (session.user.handle !== handle.toLowerCase()) {
-    throw new Error('Handle mismatch during login verification');
-  }
+  const birthYear = deriveBirthYear(result.discloseOutput?.dateOfBirth);
+  logger.info(
+    {
+      sessionId,
+      userId,
+      dobRaw: result.discloseOutput?.dateOfBirth ?? null,
+      birthYear,
+    },
+    'Login verification extracted birth year from Self disclosure'
+  );
 
   const disclosed = buildDisclosedPayload(result.discloseOutput, isMinimumAgeValid);
-  const existingDisclosed = safeParseDisclosed(session.user.disclosed);
-  const mergedDisclosed = { ...existingDisclosed, ...disclosed };
+  const mergedDisclosed = { ...safeParseDisclosed(session.user.disclosed), ...disclosed };
 
   await prisma.user.update({
     where: { id: session.userId },
@@ -354,6 +404,7 @@ async function verifyLoginSession(opts: {
       humanStatus: 'verified',
       verifiedAt: new Date(),
       disclosed: JSON.stringify(mergedDisclosed),
+      ...(birthYear ? { birthYear } : {}),
     },
   });
 

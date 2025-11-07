@@ -10,9 +10,13 @@ datasource db {
 model User {
   id           String    @id @default(uuid())
   handle       String    @unique
+  selfNullifier String?  @unique // Self Protocol nullifier prevents duplicate passport registrations
   avatarUrl    String?
-  humanStatus  String    // 'verified' | 'unverified' | 'bot'
-  disclosed    String    @default("{}") // JSON string: { country?: string, is21?: boolean }
+  humanStatus  String
+  disclosed    String    @default("{}")
+  birthYear    Int?                // Parsed from Self's dateOfBirth (e.g., 2005)
+  generationId Int?                // Proven generation: 0=GenZ, 1=Millennial, etc.
+  generationProofHash String?     // Claim hash from generation proof
   verifiedAt   DateTime?
   createdAt    DateTime  @default(now())
   tweets       Tweet[]
@@ -36,7 +40,7 @@ model LoginSession {
   sessionId  String   @unique
   userId     String
   handle     String
-  status     String   @default("pending") // 'pending' | 'verified' | 'failed'
+  status     String   @default("pending")
   token      String?
   createdAt  DateTime @default(now())
   verifiedAt DateTime?
