@@ -1,12 +1,15 @@
-# zkTwitter: Generation Membership Circuit Design
+# zkTwitter: Generation + Social-Proof Design
 
 ## Goal
 
-Extend Self’s verified identity proofs by adding a zk circuit that allows users to prove generational membership (e.g. “Gen Z”, "Boomer", etc) without revealing their exact age, using Self’s existing passport-based nullifiers as a privacy-preserving anchor.
+Extend Self’s verified identity proofs by adding:
+- A generation-membership circuit so users can prove “I’m Gen Z” without revealing their birth year.
+- A selective social-proof circuit so users can prove “I follow ≥ N verified accounts” without revealing who they follow.
+Both circuits key off the Self `selfNullifier`, so the backend can bind the proofs to the verified passport while preserving privacy.
 
 ## Overview
 
-Self handles passport verification via trusted execution environments (TEE) and on-chain registry commitments, ensuring users’ identities are cryptographically validated. zkTwitter builds on this by enabling selective disclosure of attributes (such as age only or nationality), adding a custom zero-knowledge circuit to prove generational membership without revealing exact birth year, and exploring SP1 integration for proof aggregation.
+Self handles passport verification via trusted execution environments (TEE) and on-chain registry commitments, ensuring users’ identities are cryptographically validated. zkTwitter builds on this by enabling selective disclosure of attributes, layering two custom circuits (generation + social proof), and outlining an SP1 aggregation plan so both proofs can be collapsed into a single recursive proof later. Circuit-level documentation (build scripts, inputs/outputs, threat model) lives in `circuits/README.md`; this document summarizes the product/system design.
 
 ## 1. How Self Protocol Works with zkTwitter
 
@@ -197,6 +200,77 @@ From Self's proof payload:
 Users can choose which attributes to disclose during proof generation, such as age only or age and nationality. zkTwitter respects this disclosure scope by verifying proofs according to the selected configuration, ensuring privacy is maintained according to user preferences.
 
 ---
+
+## 3. Selective Social Proof Circuit
+
+### Motivation
+
+Even with verified identity, we wanted a privacy-preserving badge that says “this account follows at least N verified humans.” Directly sending follow graphs to the backend would leak who people follow, so we build a circuit that:
+- Counts how many of the user’s followees appear in the server-controlled verified list.
+- Proves the count ≥ `minVerifiedNeeded` without revealing which leaves were used.
+- Binds the claim to the Self passport (via `selfNullifier`) and to a backend-issued `sessionNonce`.
+
+### High-Level Flow
+
+1. **Backend prep (`/social/context`)**
+   - Builds a Poseidon Merkle tree of all verified users (`Poseidon(selfNullifier)` per leaf).
+   - Returns `{verifiedRoot, merkleDepth, minVerifiedNeeded, sessionNonce}`.
+
+2. **Client witness generation (`/social` page)**
+   - Derives Poseidon leaves for the followees the user wants to include.
+   - Uses the downloaded Merkle siblings to prove inclusion for up to `N_MAX` followees.
+   - Prepares private inputs:
+     - `followeeLeaves[N_MAX]`, `followeeIsPresent[N_MAX]`, `merkleSiblings[N_MAX][DEPTH]`.
+   - Public inputs:
+     - `selfNullifier`, `sessionNonce`, `verifiedRoot`, `minVerifiedNeeded`.
+
+3. **Circuit logic (see `circuits/social/socialProof.circom` for details)**
+   - Verifies each selected followee’s Merkle path.
+   - Accumulates `verifiedCount`.
+   - Enforces `verifiedCount >= minVerifiedNeeded`.
+   - Emits `isQualified` (1/0) and `claimHash = Poseidon(selfNullifier, sessionNonce, verifiedRoot, minVerifiedNeeded)`.
+
+4. **Backend verification (`POST /social/verify`)**
+   - Verifies Groth16 proof with `server/circuits/social_proof_verification_key.json`.
+   - Checks `sessionNonce` hasn’t been used, `verifiedRoot` and `minVerifiedNeeded` match server config, and `selfNullifier` matches the authenticated user.
+   - Stores `socialProofLevel = minVerifiedNeeded`, `socialClaimHash`, `socialVerifiedAt`.
+
+5. **UI**
+   - Profile cards and tweets show “Social Verified (N+)” badges.
+   - Timeline filters can narrow to users with a generation badge and/or social badge.
+
+Full circuit inputs/outputs plus build steps are documented in `circuits/README.md` (“Selective Social Proof Circuit” section), so anyone can regenerate artifacts after cleaning the repo.
+
+---
+
+## 4. SP1 Aggregation Outline
+
+Today we verify generation and social-proof Groth16 proofs separately. To reduce verification overhead (and make an on-chain story cleaner) we plan to use Succinct’s SP1 zkVM to aggregate them:
+
+1. **Inputs to SP1 program**
+   - Generation Groth16 proof + public signals.
+   - Social-proof Groth16 proof + public signals.
+   - Self QR attestation hash, session nonce, server configs (generation table hash, verifiedRoot, minVerifiedNeeded).
+
+2. **SP1 logic**
+   - Run Groth16 verifier gadgets twice inside SP1.
+   - Enforce the shared `selfNullifier` matches across Self attestation, generation proof, and social proof.
+   - Recompute the Poseidon claim hashes and session nonce bindings.
+   - Output a single SP1 proof with public signals `{selfNullifier, generationId, socialProofLevel, claimHash}`.
+
+3. **Backend impact**
+   - Add `/sp1/context` + `/sp1/verify` endpoints that issue one nonce and expect one SP1 proof.
+   - Drop per-circuit verification in favor of a single SP1 verifier call (cheaper to port on-chain later).
+
+If we had another day, we’d scaffold the SP1 TypeScript program, integrate Succinct’s SDK, and extend the frontend to call `sp1.fullProve` after both Groth16 proofs are ready. The outline above is ready for tomorrow’s presentation so reviewers understand the upgrade path.
+
+---
+
+## 5. References
+
+- `circuits/README.md` – full specs for both circuits, build scripts, threat model, and artifact pinning instructions.
+- `server/src/routes/generation.ts` & `server/src/routes/social.ts` – request/response flows with detailed logging for demo walk-throughs.
+- `server/prisma/seed.ts` – curated sample accounts showing every badge combination (verified humans, pending users, bots with/without badges) so UI filters have realistic data.
 
 ## 3. Security
 
