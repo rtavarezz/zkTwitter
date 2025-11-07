@@ -24,6 +24,8 @@ interface UserProfile {
   humanStatus: 'verified' | 'unverified' | 'bot'
   disclosed: DisclosedInfo
   verifiedAt: string | null
+  socialProofLevel?: number | null
+  socialVerifiedAt?: string | null
   createdAt: string
   social: SocialSnapshot
 }
@@ -127,6 +129,8 @@ export default function Profile() {
 
   const disclosed = profile.disclosed
   const countryFlag = getCountryFlag(disclosed.country)
+  const socialProofLevel = profile.socialProofLevel ?? 0
+  const socialBadgeLabel = socialProofLevel > 0 ? `Social Verified (${socialProofLevel}+)` : null
 
   return (
     <div className="profile-app">
@@ -151,6 +155,7 @@ export default function Profile() {
               <p className="profile-subtitle">
                 {isHuman ? 'Verified' : profile.humanStatus === 'bot' ? 'Bot account' : 'Verification pending'}
                 {disclosed.is21 ? ' • Age 21+' : ''}
+                {socialBadgeLabel ? ` • ${socialBadgeLabel}` : ''}
               </p>
               <div className="profile-metadata">
                 <span><strong>{profile.social.followerCount}</strong> Followers</span>
@@ -214,6 +219,17 @@ export default function Profile() {
                 <div>
                   <strong>Connected via</strong>
                   <p>Self Protocol Passport Verification</p>
+                </div>
+              </li>
+              <li>{/* Mirror the generation + social proof badges we persist for this account */}
+                <span className="icon">🛡️</span>
+                <div>
+                  <strong>Social proof badge</strong>
+                  <p>
+                    {socialBadgeLabel
+                      ? `${socialBadgeLabel}${profile.socialVerifiedAt ? ` • issued ${new Date(profile.socialVerifiedAt).toLocaleDateString()}` : ''}`
+                      : 'Not yet proven'}
+                  </p>
                 </div>
               </li>
             </ul>

@@ -8,6 +8,14 @@ import { prisma } from '../lib/prisma.js';
 import { logger } from '../lib/logger.js';
 import { requireAuth, type AuthenticatedRequest } from '../middleware/auth.js';
 
+/**
+ * My generation badge checklist:
+ * 1. Self QR proof lands in `/auth/self/verify` and I persist the nullifier + birth-year commitment.
+ * 2. Frontend runs `generationMembership` with that DOB to prove the requested range.
+ * 3. This endpoint verifies the Groth16 proof and stores `generationId` plus the claim hash.
+ * 4. Timeline/profile use those fields to render badges and enable filters.
+ */
+
 const router = Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const vKeyPath = path.resolve(__dirname, '../../circuits/verification_key.json');
@@ -56,22 +64,24 @@ router.post('/verify-generation', requireAuth, async (req: AuthenticatedRequest,
 
     // Step 4: Extract public signals from circuit output
     logger.info('Step 4: Extracting public signals from circuit');
-    // Our circuit outputs: [isMember, claimHash, selfNullifier, sessionNonce, configHash, targetGenerationId]
+    // Circuit outputs: [isMember, claimHash, birthYearCommitment, selfNullifier, sessionNonce, configHash, targetGenerationId]
     const isMember = publicSignals[0];
     const claimHash = publicSignals[1];
-    const selfNullifier = publicSignals[2];
-    const sessionNonce = publicSignals[3];
-    const configHash = publicSignals[4];
-    const targetGenerationId = parseInt(publicSignals[5]);
+    const birthYearCommitment = publicSignals[2];
+    const selfNullifier = publicSignals[3];
+    const sessionNonce = publicSignals[4];
+    const configHash = publicSignals[5];
+    const targetGenerationId = parseInt(publicSignals[6]);
 
     logger.info({
       isMember,
       targetGenerationId,
       generationName: GENERATION_NAMES[targetGenerationId],
       selfNullifierPreview: selfNullifier.slice(0, 20) + '...',
+      commitmentPreview: birthYearCommitment.slice(0, 20) + '...',
     }, 'Step 4 complete: Public signals extracted');
 
-    // Step 5: Check circuit output isMember flag
+    // Step 5: Check circuit output isMember flag (TRUST THE CIRCUIT)
     logger.info('Step 5: Checking if circuit says user is member of target generation');
     if (isMember !== '1') {
       logger.warn({ isMember, targetGenerationId }, 'REJECTED: Circuit says birth year NOT in range');
@@ -79,66 +89,51 @@ router.post('/verify-generation', requireAuth, async (req: AuthenticatedRequest,
     }
     logger.info('Step 5 complete: Circuit confirms membership (isMember=1)');
 
-    // Step 6: Fetch user from database
-    logger.info('Step 6: Fetching user from database to cross-check birth year');
+    // Step 6: Fetch user and validate identity binding
+    logger.info('Step 6: Fetching user to validate identity binding');
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       logger.error({ userId }, 'REJECTED: User not found in database');
       return res.status(404).json({ error: 'User not found' });
     }
-    logger.info({
-      userId,
-      storedBirthYear: user.birthYear,
-      storedNullifier: user.selfNullifier?.slice(0, 20) + '...',
-    }, 'Step 6 complete: User fetched from database');
 
-    // Step 7: Cross-check stored birth year matches claimed generation
-    logger.info('Step 7: Cross-checking stored birth year against claimed generation');
-    if (user.birthYear) {
-      const GENERATION_RANGES = [
-        [1997, 2012], // Gen Z
-        [1981, 1996], // Millennial
-        [1965, 1980], // Gen X
-        [1946, 1964], // Boomer
-        [1928, 1945], // Silent
-      ];
-      const [minYear, maxYear] = GENERATION_RANGES[targetGenerationId] || [0, 0];
-      const isInRange = user.birthYear >= minYear && user.birthYear <= maxYear;
-
-      logger.info({
-        storedBirthYear: user.birthYear,
-        targetGeneration: GENERATION_NAMES[targetGenerationId],
-        rangeMin: minYear,
-        rangeMax: maxYear,
-        isInRange,
-      }, 'Step 7 complete: Birth year cross-check result');
-
-      if (!isInRange) {
-        logger.warn({
-          birthYear: user.birthYear,
-          targetGen: GENERATION_NAMES[targetGenerationId],
-          range: `${minYear}-${maxYear}`,
-        }, 'REJECTED: Stored birth year does NOT match claimed generation');
-        return res.status(400).json({
-          error: `Your birth year ${user.birthYear} is not in ${GENERATION_NAMES[targetGenerationId]} range (${minYear}-${maxYear})`,
-        });
-      }
-    } else {
-      logger.warn('WARNING: No birth year stored, skipping cross-check (should not happen)');
+    // Step 7: Verify selfNullifier matches (prevents proof stealing)
+    logger.info('Step 7: Verifying selfNullifier binding');
+    if (user.selfNullifier !== selfNullifier) {
+      logger.error({
+        claimedNullifier: selfNullifier.slice(0, 20) + '...',
+        storedNullifier: user.selfNullifier?.slice(0, 20) + '...',
+      }, 'REJECTED: selfNullifier mismatch - proof not bound to this user');
+      return res.status(403).json({ error: 'Proof nullifier does not match user identity' });
     }
+    logger.info('Step 7 complete: selfNullifier matches, proof is bound to authenticated user');
 
-    // Step 8: Update user with verified generation
-    logger.info('Step 8: Updating user record with verified generation');
+    // Step 8: Verify birthYearCommitment matches (if user has proven before)
+    logger.info('Step 8: Checking birthYearCommitment consistency');
+    if (user.birthYearCommitment && user.birthYearCommitment !== birthYearCommitment) {
+      logger.error({
+        storedCommitment: user.birthYearCommitment.slice(0, 20) + '...',
+        proofCommitment: birthYearCommitment.slice(0, 20) + '...',
+      }, 'REJECTED: birthYearCommitment changed - user trying to prove with different age');
+      return res.status(400).json({
+        error: 'Birth year commitment mismatch. You cannot change your age after initial proof.',
+      });
+    }
+    logger.info('Step 8 complete: Commitment validated (or first proof)');
+
+    // Step 9: Update user with verified generation (TRUST CIRCUIT OUTPUT)
+    logger.info('Step 9: Updating user record with ZK-proven generation');
     await prisma.user.update({
       where: { id: userId },
       data: {
+        birthYearCommitment,  // Store commitment (first time) or verify it matches (subsequent)
         generationId: targetGenerationId,
         generationProofHash: claimHash,
       },
     });
-    logger.info({ userId, generationId: targetGenerationId }, 'Step 8 complete: User updated');
+    logger.info({ userId, generationId: targetGenerationId }, 'Step 9 complete: User updated with ZK-proven generation');
 
-    // Step 9: Return success response
+    // Step 10: Return success response
     logger.info({
       userId,
       generationId: targetGenerationId,

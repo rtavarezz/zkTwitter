@@ -74,6 +74,18 @@ export default function Navbar() {
             <span>Home</span>
           </Link>
 
+          {isVerified ? (
+            <Link
+              to="/social"
+              className={`nav-item ${isActive('/social')}`}
+            >
+              <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor">
+                <path d="M12 2l9 4v6.5c0 5.25-3.94 9.92-9 10.5-5.06-.58-9-5.25-9-10.5V6l9-4zm0 2.18L5 7.09v5.41c0 4.34 3.07 8.08 7 8.58 3.93-.5 7-4.24 7-8.58V7.09l-7-2.91zm0 3.82c1.93 0 3.5 1.57 3.5 3.5 0 2.8-3.5 6.5-3.5 6.5s-3.5-3.7-3.5-6.5c0-1.93 1.57-3.5 3.5-3.5zm0 2c-.83 0-1.5.67-1.5 1.5 0 .52.27 1.18.74 1.92.37.56.75 1.03.76 1.03.01 0 .39-.47.76-1.03.47-.74.74-1.4.74-1.92 0-.83-.67-1.5-1.5-1.5z"/>
+              </svg>
+              <span>Social</span>
+            </Link>
+          ) : null}
+
           <Link
             to="/messages"
             className={`nav-item ${isActive('/messages')}`}

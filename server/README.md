@@ -59,6 +59,21 @@ Get all tweets with user verification status.
 curl http://localhost:3001/timeline
 ```
 
+### Social Proof Endpoints
+
+- `GET /social/context` (auth required) – returns `{ verifiedRoot, merkleDepth, minVerifiedNeeded, sessionNonce, leafHashKind }`. Each call mints a single-use nonce stored in the `UsedNonce` table.
+- `POST /social/verify` (auth required) – accepts `{ proof, publicSignals }`, verifies the Groth16 proof with `server/circuits/social_proof_verification_key.json`, checks that the public signals match the current config, consumes the nonce, and persists `socialProofLevel`, `socialClaimHash`, and `socialVerifiedAt` on the user.
+
+Configuration is stored in the `Config` table. Populate the following keys (decimal strings) before issuing badges:
+
+| Key | Description |
+| --- | ----------- |
+| `SOCIAL_VERIFIED_ROOT` | Poseidon Merkle root built from `Poseidon(selfNullifier)` for every verified account |
+| `SOCIAL_MERKLE_DEPTH` | Fixed tree depth (e.g., 20) |
+| `SOCIAL_MIN_VERIFIED_NEEDED` | Minimum number of verified follows required for the badge |
+
+`UsedNonce` enforces replay protection for `/social/verify`. Whenever you rotate the verified list, recompute the Merkle root, update `SOCIAL_VERIFIED_ROOT`, and broadcast the new depth/root hash. The frontend’s `/social` page surfaces these parameters and lets users upload the proof bundle produced by the Circom circuit.
+
 ## Architecture
 
 ```

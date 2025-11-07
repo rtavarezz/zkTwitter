@@ -34,6 +34,10 @@ type LoginStatusResponse = {
     avatarUrl: string | null
     humanStatus: string
     disclosed: Record<string, unknown>
+    selfNullifier?: string | null
+    generationId?: number | null
+    socialProofLevel?: number | null
+    socialVerifiedAt?: string | null
   } | null
 }
 

@@ -16,6 +16,17 @@ router.get('/', async (req, res, next) => {
       : 20;
     const cursor = req.query.cursor as string | undefined;
     const generationId = req.query.generation ? parseInt(req.query.generation as string) : undefined;
+    const socialProofFloor = req.query.socialProof
+      ? parseInt(req.query.socialProof as string)
+      : undefined;
+
+    const authorFilters: Record<string, unknown> = {};
+    if (generationId !== undefined && !Number.isNaN(generationId)) {
+      authorFilters.generationId = generationId;
+    }
+    if (socialProofFloor !== undefined && !Number.isNaN(socialProofFloor)) {
+      authorFilters.socialProofLevel = { gte: socialProofFloor };
+    }
 
     const tweets = await prisma.tweet.findMany({
       take: limit + 1,
@@ -23,11 +34,7 @@ router.get('/', async (req, res, next) => {
         cursor: { id: cursor },
         skip: 1,
       }),
-      where: generationId !== undefined ? {
-        author: {
-          generationId,
-        },
-      } : undefined,
+      where: Object.keys(authorFilters).length > 0 ? { author: authorFilters } : undefined,
       include: {
         author: {
           select: {
@@ -37,6 +44,8 @@ router.get('/', async (req, res, next) => {
             humanStatus: true,
             disclosed: true,
             generationId: true,
+            socialProofLevel: true,
+            socialVerifiedAt: true,
           },
         },
       },
@@ -58,6 +67,8 @@ router.get('/', async (req, res, next) => {
         humanStatus: tweet.author.humanStatus,
         disclosed: safeParseDisclosed(tweet.author.disclosed),
         generationId: tweet.author.generationId,
+        socialProofLevel: tweet.author.socialProofLevel,
+        socialVerifiedAt: tweet.author.socialVerifiedAt,
       },
     }));
 
@@ -109,6 +120,9 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res, next) => {
             avatarUrl: true,
             humanStatus: true,
             disclosed: true,
+            generationId: true,
+            socialProofLevel: true,
+            socialVerifiedAt: true,
           },
         },
       },
@@ -126,6 +140,9 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res, next) => {
         avatarUrl: tweet.author.avatarUrl,
         humanStatus: tweet.author.humanStatus,
         disclosed: safeParseDisclosed(tweet.author.disclosed),
+        generationId: tweet.author.generationId,
+        socialProofLevel: tweet.author.socialProofLevel,
+        socialVerifiedAt: tweet.author.socialVerifiedAt,
       },
     };
 

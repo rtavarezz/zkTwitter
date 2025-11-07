@@ -7,6 +7,7 @@ import Timeline from './pages/Timeline'
 import Messages from './pages/Messages'
 import Profile from './pages/Profile'
 import GenerationProof from './pages/GenerationProof'
+import SocialProof from './pages/SocialProof'
 import './index.css'
 import { AuthProvider } from './context/AuthContext'
 
@@ -22,6 +23,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route path="/messages" element={<Messages />} />
           <Route path="/profile/:handle" element={<Profile />} />
           <Route path="/generation-proof" element={<GenerationProof />} />
+          <Route path="/social" element={<SocialProof />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>

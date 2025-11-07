@@ -8,6 +8,8 @@ type AuthUser = {
   disclosed: Record<string, unknown>;
   selfNullifier?: string | null;
   generationId?: number | null;
+  socialProofLevel?: number | null;
+  socialVerifiedAt?: string | null;
 };
 
 type AuthState = {

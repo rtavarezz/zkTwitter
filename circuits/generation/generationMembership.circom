@@ -1,7 +1,8 @@
+// Proves "my birth year lies inside generation X" without leaking the raw DOB.
 pragma circom 2.1.5;
 
 include "../primitives/poseidon.circom";
-include "../primitives/comparators.circom";
+include "circomlib/circuits/comparators.circom";
 include "./generationConfig.circom";
 include "./birthYearParser.circom";
 
@@ -15,11 +16,12 @@ template GenerationMembership(MAX_GENERATIONS) {
     // Private inputs
     signal input generationConfig[MAX_GENERATIONS * 3];  // [id, minYear, maxYear] per generation
     signal input birthYear;
-    signal input userIdentifier;
+    signal input birthYearSalt;  // Salt for commitment
 
     // Public outputs
     signal output isMember;
     signal output claimHash;
+    signal output birthYearCommitment;  // Poseidon(birthYear, salt) - hides exact age
 
     // 1. Validate and hash generation config
     component config = GenerationConfig(MAX_GENERATIONS);
@@ -48,12 +50,19 @@ template GenerationMembership(MAX_GENERATIONS) {
     signal rangeCheck1 <== gtMin.out * ltMax.out;
     isMember <== rangeCheck1;
 
-    // 4. Compute claim hash binding user to generation
-    component claimHasher = PoseidonHasher(4);
-    claimHasher.inputs[0] <== userIdentifier;
-    claimHasher.inputs[1] <== selfNullifier;
-    claimHasher.inputs[2] <== targetGenerationId;
-    claimHasher.inputs[3] <== sessionNonce;
+    // 4. Compute birthYearCommitment (hides exact age)
+    component commitmentHasher = PoseidonHasher(2);
+    commitmentHasher.inputs[0] <== parser.year;
+    commitmentHasher.inputs[1] <== birthYearSalt;
+    birthYearCommitment <== commitmentHasher.out;
+
+    // 5. Compute claim hash binding user to this specific proof
+    component claimHasher = PoseidonHasher(5);
+    claimHasher.inputs[0] <== birthYearCommitment;  // Binds to committed age
+    claimHasher.inputs[1] <== selfNullifier;        // Binds to identity
+    claimHasher.inputs[2] <== targetGenerationId;   // Binds to claimed generation
+    claimHasher.inputs[3] <== sessionNonce;         // Prevents replay
+    claimHasher.inputs[4] <== generationConfigHash; // Binds to config
     claimHash <== claimHasher.out;
 }
 

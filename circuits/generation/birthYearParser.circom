@@ -1,6 +1,6 @@
 pragma circom 2.1.5;
 
-include "../primitives/comparators.circom";
+include "circomlib/circuits/comparators.circom";
 
 template BirthYearParser() {
     signal input yearField;

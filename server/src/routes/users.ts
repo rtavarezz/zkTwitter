@@ -35,6 +35,8 @@ router.get('/:handle', async (req, res) => {
         humanStatus: user.humanStatus,
         disclosed: safeParseDisclosed(user.disclosed),
         verifiedAt: user.verifiedAt,
+        socialProofLevel: user.socialProofLevel,
+        socialVerifiedAt: user.socialVerifiedAt,
         createdAt: user.createdAt,
         social,
       },
