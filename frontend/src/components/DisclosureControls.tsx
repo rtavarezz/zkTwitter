@@ -12,9 +12,13 @@ export type DisclosureOptions = {
   expiryDate: boolean
 }
 
+// zkTwitter platform-wide minimum age: 20+
+// This is enforced by the platform, not configurable by users
+export const ZKTWITTER_MINIMUM_AGE = 20;
+
 export const DEFAULT_DISCLOSURE_OPTIONS: DisclosureOptions = {
-  minimumAge: 21,
-  ofac: true,
+  minimumAge: ZKTWITTER_MINIMUM_AGE,
+  ofac: false,  // Temporarily disabled for testing age requirement
   nationality: true,
   name: false,
   gender: false,
@@ -63,27 +67,14 @@ export function DisclosureControls({ value, onChange }: DisclosureControlsProps)
       <legend>Disclosure preferences</legend>
 
       <div className="disclosure-row">
-        <label htmlFor="minimumAge" className="disclosure-label">
-          Minimum age requirement
+        <div className="disclosure-label">
+          <strong>Age requirement</strong>
           <span className="disclosure-hint">
-            Self only reveals whether you meet this threshold. Set to 0 to disable.
+            zkTwitter requires all users to be 20 years or older. Self will verify your age without revealing your exact birth date.
           </span>
-        </label>
-        <div className="slider">
-          <input
-            id="minimumAge"
-            type="range"
-            min={0}
-            max={100}
-            value={value.minimumAge}
-            onChange={(event) =>
-              onChange({
-                ...value,
-                minimumAge: Number(event.target.value),
-              })
-            }
-          />
-          <span>{value.minimumAge > 0 ? `${value.minimumAge}+` : 'Disabled'}</span>
+        </div>
+        <div style={{ padding: '12px 16px', background: '#1e3a5f', borderRadius: '8px', fontWeight: 'bold', color: '#4a9eff' }}>
+          20+ required
         </div>
       </div>
 

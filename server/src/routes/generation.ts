@@ -37,6 +37,19 @@ const verifyProofSchema = z.object({
   publicSignals: z.array(z.string()),
 });
 
+/**
+ * Backend verification endpoint for generation proofs.
+ *
+ * Flow:
+ * 1. Frontend (GenerationProof.tsx) generates proof client-side using generationMembership.circom
+ * 2. Proof + public signals sent to this endpoint
+ * 3. We cryptographically verify the proof with snarkjs (Groth16 verification)
+ * 4. Extract generation ID, selfNullifier, and birthYearCommitment from public signals
+ * 5. Validate nullifier binding (prevents proof stealing)
+ * 6. Store generation ID in DB WITHOUT storing birth year (privacy preserved)
+ *
+ * Security: Birth year never leaves the client. We only store which generation they belong to.
+ */
 router.post('/verify-generation', requireAuth, async (req: AuthenticatedRequest, res, next) => {
   try {
     logger.info('=== GENERATION PROOF VERIFICATION START ===');
@@ -47,12 +60,13 @@ router.post('/verify-generation', requireAuth, async (req: AuthenticatedRequest,
     const userId = req.auth!.sub;
     logger.info({ userId, publicSignalsCount: publicSignals.length }, 'Step 1 complete: Request parsed');
 
-    // Step 2: Load verification key
+    // Step 2: Load verification key (generated during circuit trusted setup)
     logger.info('Step 2: Loading circuit verification key');
     const vKey = await loadVerificationKey();
     logger.info('Step 2 complete: Verification key loaded');
 
-    // Step 3: Verify Groth16 proof cryptographically
+    // Step 3: Cryptographically verify Groth16 proof using snarkjs
+    // This proves the circuit was executed correctly with valid inputs
     logger.info('Step 3: Verifying Groth16 proof with snarkjs');
     const isValid = await groth16.verify(vKey, publicSignals, proof);
     logger.info({ isValid }, 'Step 3 complete: Groth16 verification result');
@@ -89,7 +103,9 @@ router.post('/verify-generation', requireAuth, async (req: AuthenticatedRequest,
     }
     logger.info('Step 5 complete: Circuit confirms membership (isMember=1)');
 
-    // Step 6: Fetch user and validate identity binding
+    // Step 6: Fetch user from DB to validate identity binding
+    // DB query: SELECT * FROM User WHERE id = userId
+    // Returns: selfNullifier, birthYearCommitment (if previously proven)
     logger.info('Step 6: Fetching user to validate identity binding');
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
@@ -121,7 +137,13 @@ router.post('/verify-generation', requireAuth, async (req: AuthenticatedRequest,
     }
     logger.info('Step 8 complete: Commitment validated (or first proof)');
 
-    // Step 9: Update user with verified generation (TRUST CIRCUIT OUTPUT)
+    // Step 9: Save proof results to DB (TRUST CIRCUIT OUTPUT)
+    // DB operation: UPDATE User SET birthYearCommitment, generationId, generationProofHash
+    // What we store:
+    //   - birthYearCommitment: Poseidon(birthYear, salt) - hides exact age
+    //   - generationId: 0-4 (GenZ, Millennial, GenX, Boomer, Silent)
+    //   - generationProofHash: Binds proof to identity + session
+    // What we DON'T store: birthYear (never leaves client!)
     logger.info('Step 9: Updating user record with ZK-proven generation');
     await prisma.user.update({
       where: { id: userId },
@@ -133,12 +155,16 @@ router.post('/verify-generation', requireAuth, async (req: AuthenticatedRequest,
     });
     logger.info({ userId, generationId: targetGenerationId }, 'Step 9 complete: User updated with ZK-proven generation');
 
-    // Step 10: Return success response
+    // Step 10: Return success response to frontend
+    // Response body: { success: true, generationId: 0-4, generationName: "Gen Z", claimHash: "..." }
+    // Frontend (GenerationProof.tsx) receives this and:
+    //   1. Updates local user context with generationId
+    //   2. Redirects to timeline where badge now displays
     logger.info({
       userId,
       generationId: targetGenerationId,
       generationName: GENERATION_NAMES[targetGenerationId],
-    }, 'Step 9 complete: SUCCESS - Generation proof verified');
+    }, 'Step 10 complete: SUCCESS - Generation proof verified');
     logger.info('=== GENERATION PROOF VERIFICATION END ===');
 
     res.json({

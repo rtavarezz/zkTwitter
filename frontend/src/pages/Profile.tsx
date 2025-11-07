@@ -154,7 +154,6 @@ export default function Profile() {
               <h1>@{profile.handle}</h1>
               <p className="profile-subtitle">
                 {isHuman ? 'Verified' : profile.humanStatus === 'bot' ? 'Bot account' : 'Verification pending'}
-                {disclosed.is21 ? ' • Age 21+' : ''}
                 {socialBadgeLabel ? ` • ${socialBadgeLabel}` : ''}
               </p>
               <div className="profile-metadata">
@@ -192,37 +191,24 @@ export default function Profile() {
             <h2>About this account</h2>
             <ul className="profile-details">
               <li>
-                <span className="icon">📅</span>
                 <div>
                   <strong>Date joined</strong>
                   <p>{joined}</p>
                 </div>
               </li>
               <li>
-                <span className="icon">📍</span>
                 <div>
                   <strong>Account based in</strong>
                   <p>{disclosed.country ? `${countryFlag} ${disclosed.country}` : 'Not disclosed'}</p>
                 </div>
               </li>
-              {disclosed.is21 && (
-                <li>
-                  <span className="icon">🎂</span>
-                  <div>
-                    <strong>Age verification</strong>
-                    <p>21+ years old</p>
-                  </div>
-                </li>
-              )}
               <li>
-                <span className="icon">🔐</span>
                 <div>
                   <strong>Connected via</strong>
                   <p>Self Protocol Passport Verification</p>
                 </div>
               </li>
-              <li>{/* Mirror the generation + social proof badges we persist for this account */}
-                <span className="icon">🛡️</span>
+              <li>
                 <div>
                   <strong>Social proof badge</strong>
                   <p>

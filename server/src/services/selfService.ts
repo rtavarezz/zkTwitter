@@ -72,7 +72,7 @@ const verifier = new SelfBackendVerifier(
   AllIds,
   new DefaultConfigStore({
     excludedCountries: [],
-    ofac: true,
+    ofac: true,  // Enable OFAC to debug what Self returns
   }),
   process.env.SELF_USER_ID_TYPE as 'uuid' | 'hex'
 );
