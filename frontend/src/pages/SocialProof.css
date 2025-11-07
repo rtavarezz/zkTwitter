@@ -1,0 +1,107 @@
+.social-proof-app {
+  min-height: 100vh;
+  background: #050f1c;
+  color: #e2e8f0;
+}
+
+.social-proof-shell {
+  width: min(860px, 100%);
+  margin: 0 auto;
+  padding: 4rem 1.5rem 3rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  align-items: flex-start;
+}
+
+.social-proof-shell header {
+  width: 100%;
+  text-align: left;
+  padding-block: 1rem;
+}
+
+.social-proof-shell header h1 {
+  font-size: 2.3rem;
+  margin: 0 0 0.65rem;
+}
+
+.social-proof-shell header p {
+  margin-top: 0.75rem;
+  margin-bottom: 1.75rem;
+  color: #c1c9de;
+  max-width: 640px;
+  line-height: 1.5;
+}
+
+.card {
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 20px;
+  padding: 1.5rem;
+  box-shadow: 0 20px 40px -30px rgba(15, 23, 42, 0.8);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.context-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+}
+
+.context-grid dt {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #94a3b8;
+}
+
+.context-grid dd {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.85rem;
+  color: #e2e8f0;
+  word-break: break-all;
+  margin: 0.2rem 0 0;
+}
+
+.instructions {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: #cbd5f5;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.helper-text {
+  color: #94a3b8;
+  font-size: 0.95rem;
+  margin-top: 0.5rem;
+}
+
+.file-input input {
+  display: none;
+}
+
+.proof-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.privacy-list {
+  list-style: disc;
+  padding-left: 1.25rem;
+  color: #cbd5f5;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}

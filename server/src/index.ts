@@ -8,6 +8,7 @@ import timelineRoutes from './routes/timeline.js';
 import usersRoutes from './routes/users.js';
 import messagesRoutes from './routes/messages.js';
 import generationRoutes from './routes/generation.js';
+import socialRoutes from './routes/social.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { logger } from './lib/logger.js';
 
@@ -60,6 +61,7 @@ app.use('/tweets', timelineRoutes);
 app.use('/users', usersRoutes);
 app.use('/messages', messagesRoutes);
 app.use('/generation', generationRoutes);
+app.use('/social', socialRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

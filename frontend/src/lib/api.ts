@@ -48,7 +48,16 @@ export async function apiPost<T>(path: string, body: unknown, init?: RequestInit
     throw new Error(message);
   }
 
-  return (await response.json()) as T;
+  if (response.status === 204) {
+    return {} as T;
+  }
+
+  const contentType = response.headers.get('Content-Type') ?? '';
+  if (contentType.includes('application/json')) {
+    return (await response.json()) as T;
+  }
+
+  return {} as T;
 }
 
 export async function apiDelete<T>(path: string, init?: RequestInit): Promise<T> {

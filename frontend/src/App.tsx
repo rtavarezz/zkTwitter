@@ -140,6 +140,10 @@ export default function App() {
             avatarUrl: string
             humanStatus: string
             disclosed: Record<string, unknown>
+            selfNullifier?: string | null
+            generationId?: number | null
+            socialProofLevel?: number | null
+            socialVerifiedAt?: string | null
           }
         }>(`/auth/register/status/${userHandle}`)
         console.log('[pollRegistrationStatus] Received status:', status.status, 'has token:', !!status.token, 'has user:', !!status.user)

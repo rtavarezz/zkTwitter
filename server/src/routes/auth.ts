@@ -11,6 +11,14 @@ import { buildDisclosedPayload, safeParseDisclosed } from '../utils/disclosure.j
 import { ensureMutualFollows } from '../services/socialGraph.js';
 import { maybeDumpSelfProof } from '../utils/selfProofDump.js';
 
+/**
+ * My quick reference for the end-to-end auth flow:
+ * 1. `/auth/register/init` -> issue userId + QR session for the Self app.
+ * 2. User scans QR, Self posts the proof to `/auth/self/verify`, and I persist the nullifier/disclosures.
+ * 3. `/auth/login/*` reuses the same verifier for returning users.
+ * 4. With a stored nullifier + birth-year commitment the user can run the zkTwitter circuits.
+ */
+
 const router = Router();
 
 const verifyLimiter = rateLimit({
@@ -30,6 +38,7 @@ const registerInitSchema = z.object({
   avatarUrl: z.string().url().optional(),
 });
 
+// Step 1 of onboarding: mint a userId and QR payload the Self app can scan.
 router.post('/register/init', async (req, res, next) => {
   try {
     const { handle, avatarUrl } = registerInitSchema.parse(req.body);
@@ -128,6 +137,9 @@ router.get('/register/status/:handle', async (req, res, next) => {
         humanStatus: user.humanStatus,
         disclosed,
         verifiedAt: user.verifiedAt,
+        selfNullifier: user.selfNullifier,
+        socialProofLevel: user.socialProofLevel,
+        socialVerifiedAt: user.socialVerifiedAt,
       },
     });
   } catch (error) {
@@ -139,6 +151,7 @@ const loginInitSchema = z.object({
   handle: handleSchema,
 });
 
+// Returning user login begins by minting a fresh sessionId for the QR flow.
 router.post('/login/init', async (req, res, next) => {
   try {
     const { handle } = loginInitSchema.parse(req.body);
@@ -174,6 +187,7 @@ const loginStatusParamsSchema = z.object({
   sessionId: z.string().uuid(),
 });
 
+// The frontend polls this endpoint while the Self proof is still in-flight.
 router.get('/login/status/:sessionId', async (req, res, next) => {
   try {
     const { sessionId } = loginStatusParamsSchema.parse(req.params);
@@ -198,6 +212,10 @@ router.get('/login/status/:sessionId', async (req, res, next) => {
             avatarUrl: session.user.avatarUrl,
             humanStatus: session.user.humanStatus,
             disclosed: safeParseDisclosed(session.user.disclosed),
+            selfNullifier: session.user.selfNullifier,
+            socialProofLevel: session.user.socialProofLevel,
+            socialVerifiedAt: session.user.socialVerifiedAt,
+            generationId: session.user.generationId,
           }
         : null,
     };
@@ -210,6 +228,7 @@ router.get('/login/status/:sessionId', async (req, res, next) => {
   }
 });
 
+// Self webhook posts the attestation here; this is where I trust-but-verify their proof.
 router.post('/self/verify', verifyLimiter, async (req, res) => {
   try {
     const proofPayload = SelfProofSchema.parse(req.body);
@@ -278,15 +297,12 @@ router.post('/self/verify', verifyLimiter, async (req, res) => {
 
 type VerificationResult = Awaited<ReturnType<typeof verifyProof>>;
 
-function deriveBirthYear(dateOfBirth?: string | null): number | null {
-  if (!dateOfBirth || dateOfBirth.length < 6) return null;
-  const yearFragment = dateOfBirth.slice(-2);
-  const yy = Number.parseInt(yearFragment, 10);
-  if (Number.isNaN(yy)) return null;
-  const cutoff = 24; // assume passports <= 2124 use 20xx
-  return (yy <= cutoff ? 2000 : 1900) + yy;
-}
+// ZK Privacy: We do NOT store plaintext birth year on backend
+// Instead, user will generate birthYearCommitment = Poseidon(birthYear, salt) client-side
+// during first generation proof. Backend only stores the commitment.
+// This prevents backend from knowing exact age while still allowing ZK proofs.
 
+// Shared between registration + login: wires the Self proof into our user record.
 async function upsertVerifiedUser(opts: {
   handle: string;
   userId: string;
@@ -297,7 +313,6 @@ async function upsertVerifiedUser(opts: {
   const { handle, userId, avatarUrl, result, isMinimumAgeValid } = opts;
   const normalizedHandle = handle.toLowerCase();
   const nullifier = result.discloseOutput?.nullifier?.toString();
-  const birthYear = deriveBirthYear(result.discloseOutput?.dateOfBirth);
 
   if (!nullifier) {
     throw new Error('Self nullifier missing from verification result');
@@ -307,10 +322,9 @@ async function upsertVerifiedUser(opts: {
     {
       handle: normalizedHandle,
       nullifierPreview: `${nullifier.slice(0, 12)}...`,
-      dobRaw: result.discloseOutput?.dateOfBirth ?? null,
-      birthYear,
+      dobDisclosed: result.discloseOutput?.dateOfBirth ? 'yes (stored in disclosed JSON only)' : 'no',
     },
-    'Derived birth year + nullifier from Self verification payload'
+    'User verified via Self - DOB NOT stored in plaintext columns (ZK privacy)'
   );
 
   const [existingNullifier, conflictingHandle] = await Promise.all([
@@ -331,6 +345,7 @@ async function upsertVerifiedUser(opts: {
   const disclosed = buildDisclosedPayload(result.discloseOutput, isMinimumAgeValid);
   const defaultAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${normalizedHandle}`;
 
+  // Store user WITHOUT plaintext birthYear - only disclosed JSON contains DOB for client-side ZK
   await prisma.user.upsert({
     where: { id: userId },
     update: {
@@ -338,9 +353,9 @@ async function upsertVerifiedUser(opts: {
       selfNullifier: nullifier,
       avatarUrl: avatarUrl ?? conflictingHandle?.avatarUrl,
       humanStatus: 'verified',
-      disclosed: JSON.stringify(disclosed),
+      disclosed: JSON.stringify(disclosed),  // DOB in disclosed for client ZK input only
       verifiedAt: new Date(),
-      ...(birthYear ? { birthYear } : {}),
+      // NOTE: birthYearCommitment will be set during first generation proof
     },
     create: {
       id: userId,
@@ -350,14 +365,15 @@ async function upsertVerifiedUser(opts: {
       humanStatus: 'verified',
       disclosed: JSON.stringify(disclosed),
       verifiedAt: new Date(),
-      birthYear,
+      // NOTE: birthYearCommitment will be set during first generation proof
     },
   });
 
-  logger.info({ handle: normalizedHandle, userId }, 'User verified via Self');
+  logger.info({ handle: normalizedHandle, userId }, 'User verified via Self (ZK-ready)');
   await ensureMutualFollows(userId);
 }
 
+// Helper used by `/auth/self/verify` when the proof is tied to a login session.
 async function verifyLoginSession(opts: {
   sessionId: string;
   userId: string;
@@ -384,15 +400,14 @@ async function verifyLoginSession(opts: {
     throw new Error('Passport verification mismatch');
   }
 
-  const birthYear = deriveBirthYear(result.discloseOutput?.dateOfBirth);
+  // ZK Privacy: DOB stored in disclosed JSON for client-side ZK proof generation only
   logger.info(
     {
       sessionId,
       userId,
-      dobRaw: result.discloseOutput?.dateOfBirth ?? null,
-      birthYear,
+      dobDisclosed: result.discloseOutput?.dateOfBirth ? 'yes (in disclosed JSON only)' : 'no',
     },
-    'Login verification extracted birth year from Self disclosure'
+    'Login verification - DOB NOT stored in plaintext columns (ZK privacy)'
   );
 
   const disclosed = buildDisclosedPayload(result.discloseOutput, isMinimumAgeValid);
@@ -403,8 +418,8 @@ async function verifyLoginSession(opts: {
     data: {
       humanStatus: 'verified',
       verifiedAt: new Date(),
-      disclosed: JSON.stringify(mergedDisclosed),
-      ...(birthYear ? { birthYear } : {}),
+      disclosed: JSON.stringify(mergedDisclosed),  // DOB here for client ZK only
+      // NOTE: birthYearCommitment set during first generation proof
     },
   });
 

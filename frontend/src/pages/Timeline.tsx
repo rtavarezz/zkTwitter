@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import Navbar from '../components/Navbar'
 import { apiGet, apiPost } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
@@ -18,6 +18,7 @@ interface User {
   humanStatus: 'verified' | 'unverified' | 'bot'
   disclosed: DisclosedInfo
   generationId?: number | null
+  socialProofLevel?: number | null
 }
 
 interface Tweet {
@@ -35,9 +36,14 @@ const GENERATIONS = [
   { id: 4, name: 'Silent' },
 ];
 
+const SOCIAL_THRESHOLDS = [
+  { value: 2, label: '2+ verified follows' },
+  { value: 4, label: '4+ verified follows' },
+  { value: 8, label: '8+ verified follows' },
+];
+
 export default function Timeline() {
   const { user, token, isVerified } = useAuth()
-  const navigate = useNavigate()
   const [tweets, setTweets] = useState<Tweet[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -47,11 +53,12 @@ export default function Timeline() {
   const [posting, setPosting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [generationFilter, setGenerationFilter] = useState<number | null>(null)
+  const [socialFilter, setSocialFilter] = useState<number | null>(null)
 
   useEffect(() => {
     void refreshTweets()
     // eslint-disable-next-line
-  }, [generationFilter])
+  }, [generationFilter, socialFilter])
 
 
   const refreshTweets = async (cursor?: string) => {
@@ -64,6 +71,7 @@ export default function Timeline() {
       const params = new URLSearchParams()
       if (cursor) params.append('cursor', cursor)
       if (generationFilter !== null) params.append('generation', generationFilter.toString())
+      if (socialFilter !== null) params.append('socialProof', socialFilter.toString())
       if (params.toString()) url += `?${params.toString()}`
 
       const data = await apiGet<{
@@ -158,6 +166,11 @@ export default function Timeline() {
     setGenerationFilter(value)
   }
 
+  const handleSocialFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value === '' ? null : parseInt(e.target.value)
+    setSocialFilter(value)
+  }
+
   return (
     <div className="timeline-page">
       <Navbar />
@@ -175,14 +188,37 @@ export default function Timeline() {
                 <option key={gen.id} value={gen.id}>{gen.name}</option>
               ))}
             </select>
+            <label htmlFor="social-filter">Social badge:</label>
+            <select
+              id="social-filter"
+              value={socialFilter === null ? '' : socialFilter}
+              onChange={handleSocialFilterChange}
+            >
+              <option value="">All badges</option>
+              {SOCIAL_THRESHOLDS.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
             {user && isVerified && (user.generationId === null || user.generationId === undefined) && (
               <Link to="/generation-proof" className="cta secondary" style={{ marginLeft: 'auto' }}>
                 Prove Generation
               </Link>
             )}
+            {user && isVerified && (
+              <Link to="/social" className="cta tertiary" style={{ marginLeft: '0.5rem' }}>
+                Social Proof
+              </Link>
+            )}
             {user && user.generationId !== null && user.generationId !== undefined && (
               <span style={{ marginLeft: 'auto', color: '#94a3b8', fontSize: '0.9rem' }}>
                 Verified: {GENERATIONS.find(g => g.id === user.generationId)?.name}
+              </span>
+            )}
+            {user && (user.socialProofLevel ?? 0) > 0 && (
+              <span style={{ marginLeft: '0.5rem', color: '#94a3b8', fontSize: '0.9rem' }}>
+                Social Verified ({user.socialProofLevel}+)
               </span>
             )}
           </div>
@@ -239,7 +275,6 @@ export default function Timeline() {
               const isBot = tweet.user.humanStatus === 'bot'
 
               const genName = getGenerationName(tweet.user.generationId)
-
               return (
                 <article key={tweet.id} className="tweet-card">
                   <div className="tweet-avatar">
@@ -258,11 +293,17 @@ export default function Timeline() {
                       <time dateTime={tweet.createdAt}>{formatTime(tweet.createdAt)}</time>
                     </header>
                     <p>{tweet.content}</p>
-                    <footer>
+                    <footer className="tweet-badges">{/* Badge chips mirror every verified attribute we store */}
                       {isHuman ? (
-                        <span className="badge human">
-                          Verified {flag ? `• ${flag}` : ''}{disclosed.is21 ? ' • 21+' : ''}{genName ? ` • ${genName}` : ''}
-                        </span>
+                        <>
+                          <span className="badge human">Verified</span>
+                          {flag && <span className="badge secondary">{flag}</span>}
+                          {disclosed.is21 && <span className="badge secondary">21+</span>}
+                          {genName && <span className="badge generation">{genName}</span>}
+                          {(tweet.user.socialProofLevel ?? 0) > 0 && (
+                            <span className="badge social">Social {tweet.user.socialProofLevel}+</span>
+                          )}
+                        </>
                       ) : (
                         <span className="badge bot">Bot account</span>
                       )}

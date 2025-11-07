@@ -48,15 +48,27 @@ export default function GenerationProof() {
     setProofSteps([]);
 
     try {
-      // Step 1: Load circuit artifacts
+      // Step 1: Load the circuit artifacts (matches server verification key).
       setProofSteps(prev => [...prev, '1. Loading circuit artifacts (WASM + proving key)...']);
       const wasmPath = '/circuits/generationMembership.wasm';
       const zkeyPath = '/circuits/generationMembership_final.zkey';
       const snarkjs = await import('snarkjs');
       setProofSteps(prev => [...prev, '✓ Circuit artifacts loaded']);
 
-      // Step 2: Prepare inputs
-      setProofSteps(prev => [...prev, '2. Preparing circuit inputs (birthYear, generation ranges)...']);
+      // Step 2: Derive a deterministic salt so the server can re-check the commitment later.
+      setProofSteps(prev => [...prev, '2. Generating salt for birthYear commitment (ZK privacy)...']);
+      const saltInput = `${user?.id ?? 'anon'}-${user?.selfNullifier ?? '0'}-birthyear-salt`;
+      const encoder = new TextEncoder();
+      const saltBytes = encoder.encode(saltInput);
+      let saltBigInt = BigInt(0);
+      for (let i = 0; i < Math.min(saltBytes.length, 31); i++) {
+        saltBigInt = (saltBigInt << BigInt(8)) | BigInt(saltBytes[i]);
+      }
+      const birthYearSalt = saltBigInt.toString();
+      setProofSteps(prev => [...prev, '✓ Salt generated (deterministic from user identity)']);
+
+      // Step 3: Assemble the inputs exactly as the circuit expects.
+      setProofSteps(prev => [...prev, '3. Preparing circuit inputs (birthYear hidden via commitment)...']);
       const generationConfig = [
         0, 1997, 2012,  // Gen Z
         1, 1981, 1996,  // Millennial
@@ -67,15 +79,6 @@ export default function GenerationProof() {
 
       const configHash = '20410492734497820080861672359265859434102176107885102445278438694323581735438';
 
-      const hashUserId = (id: string) => {
-        let hash = 0;
-        for (let i = 0; i < id.length; i++) {
-          hash = ((hash << 5) - hash) + id.charCodeAt(i);
-          hash = hash & hash;
-        }
-        return Math.abs(hash).toString();
-      };
-
       const input = {
         selfNullifier: user?.selfNullifier || '0',
         sessionNonce: Math.floor(Math.random() * 1000000).toString(),
@@ -83,12 +86,12 @@ export default function GenerationProof() {
         targetGenerationId: selectedGen.toString(),
         generationConfig: generationConfig.map(String),
         birthYear: birthYear.toString(),
-        userIdentifier: user?.id ? hashUserId(user.id) : '0',
+        birthYearSalt,
       };
-      setProofSteps(prev => [...prev, `✓ Inputs prepared (birthYear=${birthYear}, target=${GENERATIONS[selectedGen].name})`]);
+      setProofSteps(prev => [...prev, `✓ Inputs prepared (target=${GENERATIONS[selectedGen].name}, age hidden via Poseidon commitment)`]);
 
-      // Step 3: Generate proof
-      setProofSteps(prev => [...prev, '3. Generating zero-knowledge proof (this may take a few seconds)...']);
+      // Step 4: Run the Groth16 prover in-browser.
+      setProofSteps(prev => [...prev, '4. Generating zero-knowledge proof (this may take a few seconds)...']);
       const { proof, publicSignals } = await snarkjs.groth16.fullProve(
         input,
         wasmPath,
@@ -96,8 +99,8 @@ export default function GenerationProof() {
       );
       setProofSteps(prev => [...prev, '✓ ZK proof generated successfully']);
 
-      // Step 4: Submit to backend
-      setProofSteps(prev => [...prev, '4. Submitting proof to backend for verification...']);
+      // Step 5: Send proof to `/generation/verify-generation` for verification + badge persistence.
+      setProofSteps(prev => [...prev, '5. Submitting proof to backend for verification...']);
       const result = await apiPost<{
         success: boolean;
         generationId: number;
@@ -109,8 +112,8 @@ export default function GenerationProof() {
       setProofSteps(prev => [...prev, '✓ Backend verified proof cryptographically']);
 
       if (result.success) {
-        // Step 5: Update local user context
-        setProofSteps(prev => [...prev, `5. Generation verified: ${result.generationName}`]);
+        // Step 6: Update local user context
+        setProofSteps(prev => [...prev, `6. Generation verified: ${result.generationName}`]);
 
         // Fetch updated user to get generationId
         const token = localStorage.getItem('token');
@@ -208,12 +211,12 @@ export default function GenerationProof() {
           <div className="info-box">
             <h4>How it works</h4>
             <ul>
-              <li>Birth year (from Self) is used as private input to the ZK circuit</li>
-              <li>Circuit proves birth year falls in selected generation range (e.g., 1997-2012 for Gen Z)</li>
-              <li>Backend verifies the Groth16 proof cryptographically</li>
-              <li>Backend cross-checks stored birth year matches claimed generation (prevents lying)</li>
-              <li>Your tweets will display generation badge (e.g., "Verified • Gen Z")</li>
-              <li>Anyone can filter timeline by generation (no proof required to view)</li>
+              <li><strong>Privacy:</strong> Birth year stays private - only birthYearCommitment = Poseidon(birthYear, salt) is sent</li>
+              <li><strong>Proof:</strong> Circuit proves birth year falls in selected generation range (e.g., 1997-2012 for Gen Z)</li>
+              <li><strong>Verification:</strong> Backend verifies Groth16 proof cryptographically and trusts circuit output</li>
+              <li><strong>Binding:</strong> Proof is bound to your selfNullifier (prevents proof stealing)</li>
+              <li><strong>Consistency:</strong> You cannot change your commitment after first proof (prevents age lying)</li>
+              <li><strong>Badge:</strong> Your tweets will display generation badge (e.g., "Verified • Gen Z")</li>
             </ul>
           </div>
         )}

@@ -21,3 +21,5 @@ server/prisma/dev.db-journal
 server/tmp/
 circuits/build/
 circuits/.gitignore
+frontend/public/circuits/*.zkey
+frontend/public/circuits/*.ptau

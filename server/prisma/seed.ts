@@ -6,62 +6,97 @@ async function main() {
   // Verified humans
   const alice = await prisma.user.upsert({
     where: { handle: 'alice' },
-    update: {},
+    update: {
+      generationId: 0,
+      socialProofLevel: 3,
+      socialVerifiedAt: new Date(),
+    },
     create: {
       handle: 'alice',
       avatarUrl: 'https://i.pravatar.cc/150?img=1',
       humanStatus: 'verified',
       disclosed: JSON.stringify({ country: 'United States', is21: true }),
       verifiedAt: new Date(),
+      generationId: 0, // Gen Z
+      socialProofLevel: 3,
+      socialVerifiedAt: new Date(),
     },
   });
 
   const bob = await prisma.user.upsert({
     where: { handle: 'bob' },
-    update: {},
+    update: {
+      generationId: 1,
+      socialProofLevel: 2,
+      socialVerifiedAt: new Date(),
+    },
     create: {
       handle: 'bob',
       avatarUrl: 'https://i.pravatar.cc/150?img=2',
       humanStatus: 'verified',
       disclosed: JSON.stringify({ country: 'Canada', is21: true }),
       verifiedAt: new Date(),
+      generationId: 1, // Millennial
+      socialProofLevel: 2,
+      socialVerifiedAt: new Date(),
     },
   });
 
   const carol = await prisma.user.upsert({
     where: { handle: 'carol' },
-    update: {},
+    update: {
+      generationId: 2,
+      socialProofLevel: 4,
+      socialVerifiedAt: new Date(),
+    },
     create: {
       handle: 'carol',
       avatarUrl: 'https://i.pravatar.cc/150?img=3',
       humanStatus: 'verified',
       disclosed: JSON.stringify({ country: 'United Kingdom', is21: true }),
       verifiedAt: new Date(),
+      generationId: 2, // Gen X
+      socialProofLevel: 4,
+      socialVerifiedAt: new Date(),
     },
   });
 
   // Bots
   const bot1 = await prisma.user.upsert({
     where: { handle: 'bot_trader' },
-    update: {},
+    update: {
+      generationId: 3,
+      socialProofLevel: 1,
+      socialVerifiedAt: new Date(),
+    },
     create: {
       handle: 'bot_trader',
       avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=bot1',
       humanStatus: 'bot',
       disclosed: JSON.stringify({}),
       verifiedAt: null,
+      generationId: 3, // Boomer
+      socialProofLevel: 1,
+      socialVerifiedAt: new Date(),
     },
   });
 
   const bot2 = await prisma.user.upsert({
     where: { handle: 'bot_news' },
-    update: {},
+    update: {
+      generationId: 4,
+      socialProofLevel: 0,
+      socialVerifiedAt: null,
+    },
     create: {
       handle: 'bot_news',
       avatarUrl: 'https://api.dicebear.com/7.x/bottts/svg?seed=bot2',
       humanStatus: 'bot',
       disclosed: JSON.stringify({}),
       verifiedAt: null,
+      generationId: 4, // Silent
+      socialProofLevel: 0,
+      socialVerifiedAt: null,
     },
   });
 
@@ -115,6 +150,24 @@ async function main() {
         body: 'Automated alert: Market volatility rising in the last hour.'
       },
     ],
+  });
+
+  await prisma.config.upsert({
+    where: { key: 'SOCIAL_VERIFIED_ROOT' },
+    update: { value: '0' },
+    create: { key: 'SOCIAL_VERIFIED_ROOT', value: '0' },
+  });
+
+  await prisma.config.upsert({
+    where: { key: 'SOCIAL_MERKLE_DEPTH' },
+    update: { value: '20' },
+    create: { key: 'SOCIAL_MERKLE_DEPTH', value: '20' },
+  });
+
+  await prisma.config.upsert({
+    where: { key: 'SOCIAL_MIN_VERIFIED_NEEDED' },
+    update: { value: '2' },
+    create: { key: 'SOCIAL_MIN_VERIFIED_NEEDED', value: '2' },
   });
 
   console.log('Seed complete: users, follows, tweets, and starter messages');

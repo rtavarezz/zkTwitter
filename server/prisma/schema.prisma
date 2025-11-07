@@ -14,9 +14,13 @@ model User {
   avatarUrl    String?
   humanStatus  String
   disclosed    String    @default("{}")
-  birthYear    Int?                // Parsed from Self's dateOfBirth (e.g., 2005)
-  generationId Int?                // Proven generation: 0=GenZ, 1=Millennial, etc.
+  birthYearCommitment String?     // Poseidon(birthYear, salt) - hides exact age
+  birthYearSalt       String?     // Salt for commitment (stored for re-proving)
+  generationId        Int?        // Proven generation: 0=GenZ, 1=Millennial, etc.
   generationProofHash String?     // Claim hash from generation proof
+  socialProofLevel  Int     @default(0) // Minimum number of verified follows proven via ZK
+  socialClaimHash   String?
+  socialVerifiedAt  DateTime?
   verifiedAt   DateTime?
   createdAt    DateTime  @default(now())
   tweets       Tweet[]
@@ -73,4 +77,22 @@ model Message {
 
   @@index([senderId, recipientId])
   @@index([recipientId, senderId])
+}
+
+model UsedNonce {
+  id           String   @id @default(uuid())
+  scope        String
+  sessionNonce String   @unique
+  createdAt    DateTime @default(now())
+}
+
+model Config {
+  key   String @id
+  value String
+}
+
+model VerifiedLeaf {
+  id        String   @id @default(uuid())
+  leaf      String   @unique
+  createdAt DateTime @default(now())
 }
