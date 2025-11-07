@@ -62,16 +62,23 @@ export async function runSp1Aggregator(payload: AggregationPayload): Promise<Sp1
   logger.info({ inputPath }, '[SP1 STEP 2] Workspace created');
 
   logger.info('[SP1 STEP 3] Serializing Groth16 proofs for zkVM consumption');
+  // Convert to format expected by Rust CLI
   const serializedPayload = {
-    ...payload,
     generation: {
       proof: JSON.stringify(payload.generation.proof),
-      publicSignals: payload.generation.publicSignals,
+      publicSignals: payload.generation.publicSignals, // Keep camelCase for CLI extraction
     },
     social: {
       proof: JSON.stringify(payload.social.proof),
-      publicSignals: payload.social.publicSignals,
+      publicSignals: payload.social.publicSignals, // Keep camelCase for CLI extraction
     },
+    session_nonce: payload.sessionNonce,
+    verified_root: payload.verifiedRoot,
+    min_verified_needed: payload.minVerifiedNeeded,
+    target_generation_id: payload.targetGenerationId,
+    self_nullifier: payload.selfNullifier,
+    generation_claim_hash: payload.generationClaimHash,
+    social_claim_hash: payload.socialClaimHash,
   };
   await fs.writeFile(inputPath, JSON.stringify(serializedPayload, null, 2));
   logger.info('[SP1 STEP 3] Payload serialized and written to disk');

@@ -60,6 +60,11 @@ export default function Sp1Proof() {
     try {
       setSteps((prev) => [...prev, '1. Requesting SP1 context (nonce + configs)...']);
       const context = await apiGet<Sp1Context>('/sp1/context');
+      console.log('[SP1 DEBUG] Context received:', {
+        sessionNonce: context.sessionNonce,
+        sessionNonceLength: context.sessionNonce.length,
+        selfNullifier: context.selfNullifier.slice(0, 20) + '...',
+      });
       setSteps((prev) => [...prev, 'Context received']);
 
       setSteps((prev) => [...prev, '2. Recomputing generation proof bound to SP1 session...']);
@@ -192,11 +197,19 @@ async function buildGenerationProof(context: Sp1Context, user: { disclosed: Reco
     birthYearSalt: saltBigInt.toString(),
   };
 
+  console.log('[SP1 DEBUG] Generation circuit inputs:', {
+    selfNullifier: input.selfNullifier.slice(0, 20) + '...',
+    sessionNonce: input.sessionNonce.slice(0, 20) + '...',
+    targetGenerationId: input.targetGenerationId,
+  });
+
   const { proof, publicSignals } = await snarkjs.groth16.fullProve(
     input,
     '/circuits/generationMembership.wasm',
     '/circuits/generationMembership_final.zkey'
   );
+
+  console.log('[SP1 DEBUG] Generated proof public signals:', publicSignals);
 
   return {
     proof,

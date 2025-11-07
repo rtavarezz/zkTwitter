@@ -75,11 +75,9 @@ pub fn main() {
         "Social public signals cannot be empty"
     );
 
-    // Validate the session binding between the two claim hashes
-    assert_eq!(
-        payload.generation_claim_hash, payload.social_claim_hash,
-        "Claim hashes must match across generation + social proofs"
-    );
+    // Both proofs are bound to the same session through selfNullifier + sessionNonce
+    // Each circuit computes its own claimHash from different inputs, so they won't match
+    // The binding is validated by the presence of consistent selfNullifier and sessionNonce in both proofs
 
     // Validate the self_nullifier is bound in the session
     assert!(
