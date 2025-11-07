@@ -254,16 +254,22 @@ router.post('/self/verify', verifyLimiter, async (req, res) => {
     const isActuallyOnSanctionsList = Array.isArray(ofacData) && ofacData.some((val) => val === true);
 
     // Enforce platform-wide minimum age of 20+
-    if (!isValid || !isMinimumAgeValid || isActuallyOnSanctionsList) {
+    const disclosedDob = result.discloseOutput?.dateOfBirth ?? (result.discloseOutput as { date_of_birth?: string })?.date_of_birth;
+    const dobMeetsRequirement = disclosedDob ? isAtLeastMinimumAge(disclosedDob, ZKTWITTER_MINIMUM_AGE) : false;
+
+    if (!isValid || !isMinimumAgeValid || isActuallyOnSanctionsList || !dobMeetsRequirement) {
       const reason = !isValid
         ? 'Invalid proof'
         : !isMinimumAgeValid
         ? `Minimum age requirement not met (${ZKTWITTER_MINIMUM_AGE}+ required)`
+        : !dobMeetsRequirement
+        ? `Disclosed DOB does not satisfy ${ZKTWITTER_MINIMUM_AGE}+ requirement`
         : 'OFAC screening failed (passport on sanctions list)';
 
       logger.warn({
         reason,
         minimumAgeRequired: ZKTWITTER_MINIMUM_AGE,
+        disclosedDob,
         isActuallyOnSanctionsList,
         ofacData
       }, 'Self verification rejected');
@@ -472,3 +478,58 @@ async function verifyLoginSession(opts: {
 }
 
 export default router;
+
+function isAtLeastMinimumAge(dob: string, minimumAge: number): boolean {
+  const birthDate = parsePassportDob(dob);
+  if (!birthDate) {
+    return false;
+  }
+  const today = new Date();
+  let age = today.getUTCFullYear() - birthDate.getUTCFullYear();
+  const monthDiff = today.getUTCMonth() - birthDate.getUTCMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getUTCDate() < birthDate.getUTCDate())) {
+    age -= 1;
+  }
+
+  return age >= minimumAge;
+}
+
+function parsePassportDob(raw: string): Date | null {
+  if (!raw || raw.length !== 6) {
+    return null;
+  }
+
+  const first = buildDob(raw.slice(0, 2), raw.slice(2, 4), raw.slice(4, 6));
+  if (first) {
+    return first;
+  }
+
+  return buildDob(raw.slice(4, 6), raw.slice(2, 4), raw.slice(0, 2));
+}
+
+function buildDob(yearStr: string, monthStr: string, dayStr: string): Date | null {
+  const day = Number.parseInt(dayStr, 10);
+  const monthIndex = Number.parseInt(monthStr, 10) - 1;
+  const yearTwoDigits = Number.parseInt(yearStr, 10);
+
+  if (!Number.isFinite(day) || !Number.isFinite(monthIndex) || !Number.isFinite(yearTwoDigits)) {
+    return null;
+  }
+
+  if (day <= 0 || day > 31 || monthIndex < 0 || monthIndex > 11) {
+    return null;
+  }
+
+  const currentYear = new Date().getUTCFullYear();
+  let fullYear = 2000 + yearTwoDigits;
+  if (fullYear > currentYear) {
+    fullYear -= 100;
+  }
+
+  const birthDate = new Date(Date.UTC(fullYear, monthIndex, day));
+  if (Number.isNaN(birthDate.getTime())) {
+    return null;
+  }
+
+  return birthDate;
+}
