@@ -1,29 +1,30 @@
 #!/bin/bash
 
-# This deletes all users with your specific selfNullifier
-
 # Change to server directory (parent of scripts/)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVER_DIR="$(dirname "$SCRIPT_DIR")"
 cd "$SERVER_DIR" || exit 1
 
-NULLIFIER="8222833695484793693655664972457592856023758319486951690260161616247704983785"
-DB_PATH="prisma/dev.db"
-
-echo "Cleaning up accounts with nullifier: ${NULLIFIER:0:20}..."
-
-# Delete all users with this nullifier
-sqlite3 "$DB_PATH" "DELETE FROM User WHERE selfNullifier = '$NULLIFIER';"
-
-# Verify deletion
-COUNT=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM User WHERE selfNullifier = '$NULLIFIER';")
-
-if [ "$COUNT" -eq 0 ]; then
-    echo "Successfully cleaned up! You can now register with a fresh account."
-else
-    echo "Warning: $COUNT account(s) still exist with this nullifier"
+LATEST_PROOF=$(ls -1t tmp/self-proofs/*registration*.json 2>/dev/null | head -n1)
+if [ -z "$LATEST_PROOF" ]; then
+  echo "No self proof dumps found in tmp/self-proofs/. Run a signup first."
+  exit 1
 fi
 
+NULLIFIER=$(jq -r '.verification.discloseOutput.nullifier // .proof.pubSignals[7]' "$LATEST_PROOF")
+
+if [ -z "$NULLIFIER" ] || [ "$NULLIFIER" = "null" ]; then
+  echo "Unable to extract nullifier from $LATEST_PROOF"
+  exit 1
+fi
+DB_PATH="prisma/dev.db"
+
+echo "Latest nullifier from $LATEST_PROOF:"
+echo "  $NULLIFIER"
 echo ""
-echo "Current users in database:"
-sqlite3 "$DB_PATH" "SELECT handle, humanStatus FROM User;"
+ABS_DB_PATH="$SERVER_DIR/$DB_PATH"
+echo "Run the following command to delete accounts tied to it:"
+echo "  sqlite3 $ABS_DB_PATH \"DELETE FROM User WHERE selfNullifier = '$NULLIFIER';\""
+echo ""
+echo "Preview matching users:"
+sqlite3 "$ABS_DB_PATH" "SELECT handle, humanStatus FROM User WHERE selfNullifier = '$NULLIFIER';"

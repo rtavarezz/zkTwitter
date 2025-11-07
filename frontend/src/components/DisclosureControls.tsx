@@ -12,17 +12,15 @@ export type DisclosureOptions = {
   expiryDate: boolean
 }
 
-// zkTwitter platform-wide minimum age: 20+
-// This is enforced by the platform, not configurable by users
-export const ZKTWITTER_MINIMUM_AGE = 20;
+const PLATFORM_MIN_AGE = 20;
 
 export const DEFAULT_DISCLOSURE_OPTIONS: DisclosureOptions = {
-  minimumAge: ZKTWITTER_MINIMUM_AGE,
-  ofac: false,  // Temporarily disabled for testing age requirement
+  minimumAge: PLATFORM_MIN_AGE,
+  ofac: true,
   nationality: true,
   name: false,
   gender: false,
-  dateOfBirth: false,
+  dateOfBirth: true,
   issuingState: false,
   passportNumber: false,
   expiryDate: false,
@@ -34,9 +32,7 @@ export function buildSelfDisclosures(options: DisclosureOptions) {
     ofac: options.ofac,
   }
 
-  if (options.minimumAge > 0) {
-    payload.minimumAge = options.minimumAge
-  }
+  payload.minimumAge = PLATFORM_MIN_AGE
 
   if (options.nationality) payload.nationality = true
   if (options.name) payload.name = true
@@ -70,11 +66,11 @@ export function DisclosureControls({ value, onChange }: DisclosureControlsProps)
         <div className="disclosure-label">
           <strong>Age requirement</strong>
           <span className="disclosure-hint">
-            zkTwitter requires all users to be 20 years or older. Self will verify your age without revealing your exact birth date.
+            zkTwitter only onboards passports ≥ {PLATFORM_MIN_AGE}. Self proves this without revealing the exact DOB.
           </span>
         </div>
         <div style={{ padding: '12px 16px', background: '#1e3a5f', borderRadius: '8px', fontWeight: 'bold', color: '#4a9eff' }}>
-          20+ required
+          {PLATFORM_MIN_AGE}+ required
         </div>
       </div>
 
