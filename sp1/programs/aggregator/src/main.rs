@@ -3,18 +3,20 @@
 extern crate alloc;
 
 use alloc::{string::String, vec::Vec};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sp1_zkvm::io;
 
 sp1_zkvm::entrypoint!(main);
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
+#[allow(dead_code)]
 struct Groth16Payload {
-    proof: Vec<u8>,
+    proof: String,  // JSON-serialized proof object as string
     public_signals: Vec<String>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
+#[allow(dead_code)]
 struct AggregationInput {
     generation: Groth16Payload,
     social: Groth16Payload,
@@ -39,16 +41,71 @@ pub fn main() {
     // Read the aggregated payload from stdin.
     let payload: AggregationInput = io::read();
 
-    // TODO(sp1): embed groth16 verification inside the zkVM using `sp1_verifier`.
-    // For now we rely on the backend verifying both Groth16 proofs before feeding the
-    // payload to SP1. The circuit still recomputes the Poseidon hash bindings.
+    // ========================================================================
+    // DEMO MODE: Validates proof structure and public signal bindings
+    // ========================================================================
+    // TODO(production): Embed full Groth16 verification using sp1-verifier.
+    // This requires:
+    //   1. Adding sp1-verifier dependency to Cargo.toml
+    //   2. Embedding generation_verification_key.json and social_verification_key.json
+    //   3. Calling verify_groth16_proof() for both proofs inside the zkVM
+    //   4. This will significantly increase proving time (estimate: 2-3x)
+    //
+    // For now, we validate the proof structure exists and public signals are bound
+    // correctly. The backend MUST verify both Groth16 proofs before calling SP1.
+    // ========================================================================
 
-    // Sanity-check the session binding between the two claim hashes.
+    // Validate proof structures are present
+    assert!(
+        !payload.generation.proof.is_empty(),
+        "Generation proof cannot be empty"
+    );
+    assert!(
+        !payload.social.proof.is_empty(),
+        "Social proof cannot be empty"
+    );
+
+    // Validate public signals are present
+    assert!(
+        !payload.generation.public_signals.is_empty(),
+        "Generation public signals cannot be empty"
+    );
+    assert!(
+        !payload.social.public_signals.is_empty(),
+        "Social public signals cannot be empty"
+    );
+
+    // Validate the session binding between the two claim hashes
     assert_eq!(
         payload.generation_claim_hash, payload.social_claim_hash,
         "Claim hashes must match across generation + social proofs"
     );
 
+    // Validate the self_nullifier is bound in the session
+    assert!(
+        !payload.self_nullifier.is_empty(),
+        "Self nullifier cannot be empty"
+    );
+
+    // Validate the session nonce is present (prevents replay attacks)
+    assert!(
+        !payload.session_nonce.is_empty(),
+        "Session nonce cannot be empty"
+    );
+
+    // Validate generation_id is in valid range [0, 4]
+    assert!(
+        payload.target_generation_id <= 4,
+        "Generation ID must be between 0 and 4"
+    );
+
+    // Validate social proof level is reasonable
+    assert!(
+        payload.min_verified_needed > 0 && payload.min_verified_needed <= 100,
+        "Social proof level must be between 1 and 100"
+    );
+
+    // Commit the aggregated public values to SP1's output
     let public = AggregatedSignals {
         self_nullifier: &payload.self_nullifier,
         generation_id: payload.target_generation_id,
@@ -56,8 +113,8 @@ pub fn main() {
         claim_hash: &payload.generation_claim_hash,
     };
 
-    io::commit(public.self_nullifier);
+    io::commit(&public.self_nullifier.to_string());
     io::commit(&public.generation_id);
     io::commit(&public.social_level);
-    io::commit(public.claim_hash);
+    io::commit(&public.claim_hash.to_string());
 }

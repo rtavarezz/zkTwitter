@@ -4,6 +4,7 @@ import path from 'path';
 import { randomUUID } from 'crypto';
 import { spawn } from 'child_process';
 import { once } from 'events';
+import { logger } from '../lib/logger.js';
 
 export class Sp1UnavailableError extends Error {
   constructor(message: string) {
@@ -51,11 +52,31 @@ async function ensureCliPath(): Promise<string> {
 }
 
 export async function runSp1Aggregator(payload: AggregationPayload): Promise<Sp1ProofArtifact> {
+  logger.info('[SP1 STEP 1] Checking SP1 CLI availability');
   const cliPath = await ensureCliPath();
+  logger.info({ cliPath }, '[SP1 STEP 1] CLI path resolved');
+
+  logger.info('[SP1 STEP 2] Creating temporary workspace for input payload');
   const workDir = await fs.mkdtemp(path.join(tmpdir(), 'sp1-input-'));
   const inputPath = path.join(workDir, `payload-${randomUUID()}.json`);
-  await fs.writeFile(inputPath, JSON.stringify(payload, null, 2));
+  logger.info({ inputPath }, '[SP1 STEP 2] Workspace created');
 
+  logger.info('[SP1 STEP 3] Serializing Groth16 proofs for zkVM consumption');
+  const serializedPayload = {
+    ...payload,
+    generation: {
+      proof: JSON.stringify(payload.generation.proof),
+      publicSignals: payload.generation.publicSignals,
+    },
+    social: {
+      proof: JSON.stringify(payload.social.proof),
+      publicSignals: payload.social.publicSignals,
+    },
+  };
+  await fs.writeFile(inputPath, JSON.stringify(serializedPayload, null, 2));
+  logger.info('[SP1 STEP 3] Payload serialized and written to disk');
+
+  logger.info('[SP1 STEP 4] Building CLI arguments');
   const args = ['prove', inputPath];
   const network = process.env.SP1_NETWORK;
   if (network) {
@@ -65,7 +86,9 @@ export async function runSp1Aggregator(payload: AggregationPayload): Promise<Sp1
   if (proofMode) {
     args.push('--proof', proofMode);
   }
+  logger.info({ args, network, proofMode }, '[SP1 STEP 4] CLI arguments prepared');
 
+  logger.info('[SP1 STEP 5] Spawning SP1 prover (this may take several minutes depending on mode/network)');
   const child = spawn(cliPath, args, {
     stdio: ['ignore', 'pipe', 'inherit'],
     env: process.env,
@@ -77,15 +100,31 @@ export async function runSp1Aggregator(payload: AggregationPayload): Promise<Sp1
   });
 
   const [code] = (await once(child, 'close')) as [number];
+  logger.info({ exitCode: code }, '[SP1 STEP 6] Prover process completed');
+
   await fs.rm(workDir, { recursive: true, force: true });
+  logger.info('[SP1 STEP 7] Cleaned up temporary workspace');
 
   if (code !== 0) {
+    logger.error({ exitCode: code, stdout }, '[SP1 ERROR] CLI exited with non-zero code');
     throw new Error(`SP1 CLI exited with code ${code}`);
   }
 
+  logger.info('[SP1 STEP 8] Parsing proof artifact from CLI output');
   try {
-    return JSON.parse(stdout) as Sp1ProofArtifact;
+    const artifact = JSON.parse(stdout) as Sp1ProofArtifact;
+    logger.info(
+      {
+        proofLength: artifact.proof.length,
+        publicValuesLength: artifact.public_values.length,
+        vkHash: artifact.vk_hash.slice(0, 16) + '...',
+        hasMetadata: !!artifact.metadata,
+      },
+      '[SP1 STEP 8] Proof artifact parsed successfully'
+    );
+    return artifact;
   } catch (error) {
+    logger.error({ stdout, error }, '[SP1 ERROR] Failed to parse CLI output');
     throw new Error(`Failed to parse SP1 CLI output: ${stdout}`);
   }
 }
