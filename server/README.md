@@ -21,6 +21,29 @@ npm run seed
 npm run dev
 ```
 
+### Optional: Dump Self Proof Payloads for Development
+
+Set `SELF_PROOF_DUMP_DIR` in `.env` (e.g. `tmp/self-proofs`) to have the verifier automatically persist every Self proof payload plus the decoded disclosure result after registration/login. Relative paths are resolved from the `server/` directory; use an absolute path if you prefer a different location. The dumper is disabled in production and logs the output path when a file is written.
+
+To convert the latest dump into generation-circuit witness scaffolding, run:
+
+```bash
+npm run build-generation-witness
+```
+
+The tool writes JSON to `tmp/generation-witness/` containing:
+
+- the raw Self proof + public signals,
+- the decoded disclosures (nullifier, nationality, DOB),
+- inferred birth year and matching generation bucket (configurable in `scripts/buildGenerationWitness.ts`).
+
+Pass a specific dump or override the detected generation ID:
+
+```bash
+npm run build-generation-witness -- server/tmp/self-proofs/<dump>.json
+npm run build-generation-witness -- --latest --target=0   # force Gen Z
+```
+
 ## Environment Variables
 
 Please check .env.example

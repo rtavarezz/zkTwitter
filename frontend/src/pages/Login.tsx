@@ -2,6 +2,11 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import type { SelfApp } from '@selfxyz/qrcode'
 import Navbar from '../components/Navbar'
+import DisclosureControls, {
+  DEFAULT_DISCLOSURE_OPTIONS,
+  buildSelfDisclosures,
+  type DisclosureOptions,
+} from '../components/DisclosureControls'
 import { apiGet, apiPost } from '../lib/api'
 import { ensureSelfEndpoint } from '../config'
 import { useAuth } from '../context/AuthContext'
@@ -37,6 +42,9 @@ export default function Login() {
   const [handle, setHandle] = useState('')
   const [step, setStep] = useState<Step>('input')
   const [error, setError] = useState<string | null>(null)
+  const [disclosureOptions, setDisclosureOptions] = useState<DisclosureOptions>(
+    DEFAULT_DISCLOSURE_OPTIONS
+  )
   const navigate = useNavigate()
   const { login, refreshFromStorage, user, isVerified } = useAuth()
   const isMountedRef = useRef(true)
@@ -64,6 +72,7 @@ export default function Login() {
       setHandle(response.handle)
 
       const { SelfAppBuilder } = await import('@selfxyz/qrcode')
+      const disclosures = buildSelfDisclosures(disclosureOptions)
       const app = new SelfAppBuilder({
         version: 2,
         appName: 'zkTwitter',
@@ -79,11 +88,7 @@ export default function Login() {
           userId: response.userId,
           sessionId: response.sessionId,
         }),
-        disclosures: {
-          excludedCountries: [],
-          ofac: true,
-          nationality: true,
-        },
+        disclosures,
       }).build()
 
       setSelfApp(app)
@@ -200,6 +205,10 @@ export default function Login() {
                     }}
                   />
                 </div>
+                <DisclosureControls
+                  value={disclosureOptions}
+                  onChange={setDisclosureOptions}
+                />
                 <button className="cta primary" onClick={() => void handleStartLogin()}>
                   Generate login QR
                 </button>

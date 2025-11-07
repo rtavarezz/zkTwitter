@@ -7,7 +7,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "migrate": "prisma migrate dev",
-    "seed": "tsx prisma/seed.ts"
+    "seed": "tsx prisma/seed.ts",
+    "seed:users": "tsx scripts/seedUsers.ts",
+    "build-generation-witness": "node scripts/buildGenerationWitness.mjs --latest"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

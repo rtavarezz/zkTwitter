@@ -13,8 +13,11 @@ server/dist/
 frontend/dist/
 server/node_modules/
 frontend/node_modules/
+circuits/node_modules/
 server/.env
 frontend/.env
 server/prisma/dev.db
 server/prisma/dev.db-journal
-
+server/tmp/
+circuits/build/
+circuits/.gitignore

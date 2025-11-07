@@ -7,7 +7,7 @@ import { requireAuth, type AuthenticatedRequest } from '../middleware/auth.js';
 
 const router = Router();
 
-// GET /tweets with pagination
+// GET /tweets with pagination and optional generation filter
 router.get('/', async (req, res, next) => {
   try {
     const requestedLimit = Number.parseInt(req.query.limit as string, 10);
@@ -15,13 +15,19 @@ router.get('/', async (req, res, next) => {
       ? Math.min(Math.max(requestedLimit, 1), 50)
       : 20;
     const cursor = req.query.cursor as string | undefined;
+    const generationId = req.query.generation ? parseInt(req.query.generation as string) : undefined;
 
     const tweets = await prisma.tweet.findMany({
-      take: limit + 1, // Fetch one extra to check if there are more
+      take: limit + 1,
       ...(cursor && {
         cursor: { id: cursor },
-        skip: 1, // Skip the cursor itself
+        skip: 1,
       }),
+      where: generationId !== undefined ? {
+        author: {
+          generationId,
+        },
+      } : undefined,
       include: {
         author: {
           select: {
@@ -30,6 +36,7 @@ router.get('/', async (req, res, next) => {
             avatarUrl: true,
             humanStatus: true,
             disclosed: true,
+            generationId: true,
           },
         },
       },
@@ -50,6 +57,7 @@ router.get('/', async (req, res, next) => {
         avatarUrl: tweet.author.avatarUrl,
         humanStatus: tweet.author.humanStatus,
         disclosed: safeParseDisclosed(tweet.author.disclosed),
+        generationId: tweet.author.generationId,
       },
     }));
 
