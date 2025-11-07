@@ -3,7 +3,8 @@ set -e
 
 CIRCUIT_NAME="generationMembership"
 BUILD_DIR="../build"
-PTAU_FILE="powersOfTau28_hez_final_10.ptau"  # 2^10 = 1024 constraints (we have 941)
+# Circuit now has ~3.3k signals, so run against a 2^19 powers of tau file we keep checked in.
+PTAU_FILE="powersOfTau28_hez_final_19.ptau"
 
 echo "Setting up trusted setup for ${CIRCUIT_NAME}..."
 
@@ -11,8 +12,8 @@ cd $BUILD_DIR
 
 # Download powers of tau if not present
 if [ ! -f $PTAU_FILE ]; then
-    echo "Downloading powers of tau (2MB)..."
-    curl -L https://hermez.s3-eu-west-1.amazonaws.com/$PTAU_FILE -o $PTAU_FILE
+    echo "Expected $PTAU_FILE to exist in build/. Please download it manually (32MB+) once and re-run."
+    exit 1
 fi
 
 # Generate zkey

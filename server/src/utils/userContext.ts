@@ -19,25 +19,34 @@ const ContextSchema = z.union([RegistrationContextSchema, LoginContextSchema]);
 
 export type DecodedUserContext = z.infer<typeof ContextSchema>;
 
+function decodeFromHexPayload(hexPayload: string): DecodedUserContext | null {
+  try {
+    const buffer = Buffer.from(hexPayload, 'hex');
+    const utf8 = buffer.toString('utf8');
+    const jsonStart = utf8.indexOf('{');
+    if (jsonStart === -1) {
+      return null;
+    }
+    const json = utf8.substring(jsonStart);
+    return ContextSchema.parse(JSON.parse(json));
+  } catch {
+    return null;
+  }
+}
+
 export function decodeUserContextData(raw: string): DecodedUserContext {
   const cleaned = raw.startsWith('0x') ? raw.slice(2) : raw;
 
-  try {
-    // Self SDK encodes with 64-char length prefix + 32-char UUID prefix
-    const hexData = cleaned.slice(96);
-    const buffer = Buffer.from(hexData, 'hex');
-    const fullDecoded = buffer.toString('utf8');
+  // Self has shipped two encodings so far. Try full payload first, then fall back to old offsets.
+  const candidates = [cleaned, cleaned.slice(64), cleaned.slice(96), cleaned.slice(128)];
 
-    // Find the first '{' character (JSON start)
-    const jsonStart = fullDecoded.indexOf('{');
-    if (jsonStart === -1) {
-      throw new Error('No JSON found in hex data');
+  for (const candidate of candidates) {
+    const decoded = decodeFromHexPayload(candidate);
+    if (decoded) {
+      return decoded;
     }
-
-    const json = fullDecoded.substring(jsonStart);
-    return ContextSchema.parse(JSON.parse(json));
-  } catch (error) {
-    logger.error({ error, raw }, 'Failed to decode userContextData');
-    throw new Error('Invalid userContextData payload');
   }
+
+  logger.error({ raw }, 'Failed to decode userContextData');
+  throw new Error('Invalid userContextData payload');
 }
