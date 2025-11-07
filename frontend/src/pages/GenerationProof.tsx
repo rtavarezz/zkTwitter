@@ -33,7 +33,7 @@ export default function GenerationProof() {
     const disclosed = user.disclosed as Record<string, unknown>;
     const dob = disclosed.dateOfBirth as string | undefined;
     if (!dob || dob.length < 6) return null;
-    const yy = parseInt(dob.slice(-2), 10);
+    const yy = parseInt(dob.slice(0, 2), 10);
     if (isNaN(yy)) return null;
     return (yy <= 24 ? 2000 : 1900) + yy;
   };
