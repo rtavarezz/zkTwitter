@@ -49,6 +49,14 @@ Frontend serves the SPA on `http://localhost:5173`.
 | `POST /auth/login/init` | Create a login session and return `{ sessionId, userId }` |
 | `GET /auth/login/status/:sessionId` | Poll login status, receive JWT + disclosed fields when verified |
 | `POST /auth/self/verify` | Self relayer callback; validates proofs and persists registration/login results |
+| `GET /generation/context` | (Not shown above) used by the Groth16 demo page to fetch DOB commitments |
+| `POST /generation/verify-generation` | Verifies generation Groth16 proof + updates user badge |
+| `GET /social/context` | Fetch Merkle root + nonce for the social badge |
+| `GET /social/proof-data` | Fetch Poseidon leaves + sibling paths for the caller’s verified followees |
+| `POST /social/verify` | Verifies social-proof Groth16 proof and stores `socialProofLevel` |
+| `GET /sp1/context` | Mint a single nonce/config snapshot used by the SP1 aggregation flow |
+| `POST /sp1/prove` | Shells out to the SP1 CLI (when configured) to request the aggregated proof |
+| `POST /sp1/verify` | Persists `{ generationId, socialProofLevel, claimHash }` after SP1 verification |
 | `GET /tweets` | Paginated timeline with selective disclosure metadata |
 | `POST /tweets` | Create a tweet for a verified handle |
 | `GET /users/:handle` | Profile payload with disclosure flags |
@@ -65,6 +73,9 @@ Frontend serves the SPA on `http://localhost:5173`.
 - Frontend login flow: `frontend/src/pages/Login.tsx:1-162`
 - Timeline UI + composer: `frontend/src/pages/Timeline.tsx:1-210`
 - Profile disclosures: `frontend/src/pages/Profile.tsx:1-120`
+- Groth16 -> SP1 aggregation endpoints: `server/src/routes/sp1.ts`
+- SP1 CLI + zkVM program scaffold: `sp1/README.md`, `sp1/programs/aggregator/src/main.rs`, `sp1/cli/aggregator-cli/src/main.rs`
+- Aggregated front-end demo: `frontend/src/pages/Sp1Proof.tsx`
 
 ## 4. Running an End-to-End Verification
 1. Start backend and frontend locally.
@@ -81,8 +92,11 @@ Frontend serves the SPA on `http://localhost:5173`.
 - **API smoke** – `curl http://localhost:3001/tweets` / `curl http://localhost:3001/users/alice`.
 - **Manual E2E** – Run ngrok, scan QR with Self staging app, confirm timeline badge + JWT.
 
-## 6. Stretch Goal (Week 2)
-- Port Self passport circuit to SP1, generate proofs with `sp1`, and expose an audit endpoint for SP1 proof metadata.
+## 6. SP1 Aggregation (Stretch Goal)
+- Run `cd sp1 && cargo run -p aggregator-cli -- execute fixtures/sample_input.json` to sanity-check inputs.
+- Configure the prover network per [Succinct’s quickstart](https://docs.succinct.xyz/docs/sp1/prover-network/quickstart) and export `SP1_PROVER_BIN` + `SP1_NETWORK_PRIVATE_KEY` (if using the hosted provers).
+- Start the backend with those env vars so `/sp1/prove` shells out to the CLI. The frontend `/sp1` page automatically runs both Groth16 circuits, uploads them, and finalizes the aggregated badge once the CLI returns `{ proof, public_values, vk_hash }`.
+- Full build/run instructions for the Rust workspace live in `sp1/README.md`.
 
 ---
 Need deeper protocol notes? See `zkCircuits.md` for the circuit exploration scratchpad.

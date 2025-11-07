@@ -9,6 +9,7 @@ import usersRoutes from './routes/users.js';
 import messagesRoutes from './routes/messages.js';
 import generationRoutes from './routes/generation.js';
 import socialRoutes from './routes/social.js';
+import sp1Routes from './routes/sp1.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { logger } from './lib/logger.js';
 
@@ -62,6 +63,7 @@ app.use('/users', usersRoutes);
 app.use('/messages', messagesRoutes);
 app.use('/generation', generationRoutes);
 app.use('/social', socialRoutes);
+app.use('/sp1', sp1Routes);
 
 // Health check
 app.get('/health', (req, res) => {

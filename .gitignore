@@ -23,4 +23,4 @@ circuits/build/
 circuits/.gitignore
 frontend/public/circuits/*.zkey
 frontend/public/circuits/*.ptau
-/sp1/
+sp1/target/

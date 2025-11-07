@@ -86,6 +86,18 @@ export default function Navbar() {
             </Link>
           ) : null}
 
+          {isVerified ? (
+            <Link
+              to="/sp1"
+              className={`nav-item ${isActive('/sp1')}`}
+            >
+              <svg viewBox="0 0 24 24" width="26" height="26" fill="currentColor">
+                <path d="M12 2l4.5 7.794 8.5 1.43-6.25 6.333 1.35 8.443L12 21.25l-8.1 4.75 1.35-8.443L-1 11.224l8.5-1.43L12 2zm0 3.472L9.188 10.04l-6.19 1.04 4.54 4.598-.99 6.187L12 19.203l5.452 2.662-.99-6.187 4.54-4.598-6.19-1.04L12 5.472z"/>
+              </svg>
+              <span>SP1</span>
+            </Link>
+          ) : null}
+
           <Link
             to="/messages"
             className={`nav-item ${isActive('/messages')}`}
