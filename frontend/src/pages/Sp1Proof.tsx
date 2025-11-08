@@ -108,13 +108,14 @@ export default function Sp1Proof() {
         },
       });
 
-      setSteps((prev) => [...prev, '✓ Aggregated badge stored.']);
+      setSteps((prev) => [...prev, 'Aggregated badge stored successfully!']);
+      setSteps((prev) => [...prev, 'Your profile now shows "SP1" badge indicating both proofs are aggregated.']);
       setSuccess(true);
-      setTimeout(() => navigate('/timeline'), 2000);
+      setTimeout(() => navigate(`/profile/${user.handle}`), 3000);
     } catch (err) {
       console.error('[SP1] error', err);
       setError(err instanceof Error ? err.message : 'Failed to build SP1 proof');
-      setSteps((prev) => [...prev, `✗ Error: ${err instanceof Error ? err.message : 'Unknown error'}`]);
+      setSteps((prev) => [...prev, `Error: ${err instanceof Error ? err.message : 'Unknown error'}`]);
     } finally {
       setProving(false);
     }
@@ -147,7 +148,13 @@ export default function Sp1Proof() {
         )}
 
         {error && <div className="error-message">{error}</div>}
-        {success && <div className="success-message">Aggregated badge issued! Redirecting…</div>}
+        {success && (
+          <div className="success-message">
+            <strong>Success!</strong> SP1 aggregation complete. Your profile now displays the SP1 badge.
+            <br />
+            Redirecting to your profile...
+          </div>
+        )}
 
         <button className="cta primary prove-button" onClick={runSp1Flow} disabled={proving}>
           {proving ? 'Generating SP1 Proof...' : 'Generate SP1 Proof'}

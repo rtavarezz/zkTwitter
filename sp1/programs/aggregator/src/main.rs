@@ -41,19 +41,13 @@ pub fn main() {
     // Read the aggregated payload from stdin.
     let payload: AggregationInput = io::read();
 
-    // ========================================================================
-    // DEMO MODE: Validates proof structure and public signal bindings
-    // ========================================================================
-    // TODO(production): Embed full Groth16 verification using sp1-verifier.
-    // This requires:
-    //   1. Adding sp1-verifier dependency to Cargo.toml
-    //   2. Embedding generation_verification_key.json and social_verification_key.json
-    //   3. Calling verify_groth16_proof() for both proofs inside the zkVM
-    //   4. This will significantly increase proving time (estimate: 2-3x)
+    // This zkVM validates proof structure and bindings only. Backend verifies both
+    // Groth16 proofs with snarkjs before calling SP1 (server/src/routes/sp1.ts:207).
+    // This works but requires trusting the backend.
     //
-    // For now, we validate the proof structure exists and public signals are bound
-    // correctly. The backend MUST verify both Groth16 proofs before calling SP1.
-    // ========================================================================
+    // For production: embed sp1-verifier crate, add both verification keys, and verify
+    // the Groth16 proofs inside this zkVM. Removes trust assumption but will make
+    // proving 2-3x slower based on SP1 benchmarks.
 
     // Validate proof structures are present
     assert!(

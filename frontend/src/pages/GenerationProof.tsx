@@ -66,7 +66,7 @@ export default function GenerationProof() {
       const wasmPath = '/circuits/generationMembership.wasm';
       const zkeyPath = '/circuits/generationMembership_final.zkey';
       const snarkjs = await import('snarkjs');
-      setProofSteps(prev => [...prev, '✓ Circuit artifacts loaded']);
+      setProofSteps(prev => [...prev, 'Done: Circuit artifacts loaded']);
 
       // Step 2: Derive a deterministic salt for Poseidon commitment
       // Salt is deterministic so user can re-prove with same commitment
@@ -80,7 +80,7 @@ export default function GenerationProof() {
         saltBigInt = (saltBigInt << BigInt(8)) | BigInt(saltBytes[i]);
       }
       const birthYearSalt = saltBigInt.toString();
-      setProofSteps(prev => [...prev, '✓ Salt generated (deterministic from user identity)']);
+      setProofSteps(prev => [...prev, 'Done: Salt generated (deterministic from user identity)']);
 
       // Step 3: Assemble circuit inputs (public + private)
       // PRIVATE input: birthYear, birthYearSalt (NEVER sent to backend)
@@ -136,7 +136,7 @@ export default function GenerationProof() {
         proof,
         publicSignals,
       });
-      setProofSteps(prev => [...prev, '✓ Backend verified proof cryptographically']);
+      setProofSteps(prev => [...prev, 'Done: Backend verified proof cryptographically']);
 
       if (result.success) {
         // Step 6: Update local user context with generation badge
@@ -157,7 +157,7 @@ export default function GenerationProof() {
         }
 
         setSuccess(true);
-        setProofSteps(prev => [...prev, '✓ Complete! Your tweets will now show your generation badge.']);
+        setProofSteps(prev => [...prev, 'Done: Complete! Your tweets will now show your generation badge.']);
 
         // Redirect to timeline where badge now displays (e.g., "Verified • Gen Z")
         setTimeout(() => {
@@ -168,7 +168,7 @@ export default function GenerationProof() {
     } catch (err) {
       console.error('Proof generation failed:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate proof');
-      setProofSteps(prev => [...prev, `✗ Error: ${err instanceof Error ? err.message : 'Failed'}`]);
+      setProofSteps(prev => [...prev, `Error: Error: ${err instanceof Error ? err.message : 'Failed'}`]);
     } finally {
       setProving(false);
     }

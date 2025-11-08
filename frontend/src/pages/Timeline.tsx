@@ -303,6 +303,9 @@ export default function Timeline() {
                           {(tweet.user.socialProofLevel ?? 0) > 0 && (
                             <span className="badge social">Social {tweet.user.socialProofLevel}+</span>
                           )}
+                          {(tweet.user.socialProofLevel ?? 0) > 0 && tweet.user.socialVerifiedAt && (
+                            <span className="badge primary" title="SP1 aggregated proof">SP1</span>
+                          )}
                         </>
                       ) : (
                         <span className="badge bot">Bot account</span>

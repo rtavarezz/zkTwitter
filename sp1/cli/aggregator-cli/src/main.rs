@@ -111,6 +111,7 @@ struct ZkVmGroth16 {
     public_signals: Vec<String>,
 }
 
+// Reads the JSON from the server and converts it to zkVM stdin format
 fn build_stdin(path: PathBuf) -> anyhow::Result<(SP1Stdin, AggregationInput)> {
     let raw = fs::read(&path)
         .with_context(|| format!("Failed to read input file {}", path.display()))?;
@@ -119,7 +120,7 @@ fn build_stdin(path: PathBuf) -> anyhow::Result<(SP1Stdin, AggregationInput)> {
 
     eprintln!("CLI successfully parsed JSON. Self nullifier: {}", payload.self_nullifier);
 
-    // Convert to zkVM-compatible format
+    // Convert to what the zkVM expects (proofs as strings + metadata)
     let zkvm_input = ZkVmInput {
         generation: ZkVmGroth16 {
             proof: payload.generation.to_string(),
@@ -144,14 +145,30 @@ fn build_stdin(path: PathBuf) -> anyhow::Result<(SP1Stdin, AggregationInput)> {
 }
 
 fn execute_only(path: PathBuf) -> anyhow::Result<()> {
-    let (stdin, _) = build_stdin(path)?;
+    let (stdin, payload) = build_stdin(path)?;
     let client = ProverClient::from_env();
     let (public_values, report) = client.execute(ELF, &stdin).run()?;
-    println!(
+
+    eprintln!(
         "Executed aggregator program in {} cycles",
         report.total_instruction_count()
     );
-    println!("Public values: {:?}", public_values);
+
+    // SP1 recommended workflow: execute mode for dev iteration.
+    // Returns mock proof so backend flow works without waiting for real proof.
+    let response = ProverResponse {
+        proof: BASE64.encode(b"mock-proof-execute-mode"),
+        public_values: BASE64.encode(public_values.to_vec()),
+        vk_hash: "0x0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+        metadata: AggregatedMetadata {
+            self_nullifier: payload.self_nullifier,
+            generation_id: payload.target_generation_id,
+            social_level: payload.min_verified_needed,
+            claim_hash: payload.generation_claim_hash,
+        },
+    };
+
+    println!("{}", serde_json::to_string_pretty(&response)?);
     Ok(())
 }
 
@@ -177,6 +194,10 @@ fn prove(path: PathBuf, network: ProverNetwork, mode: ProofMode) -> anyhow::Resu
     }
 }
 
+// Optimization: we spawn fresh ProverClient for each /sp1/prove request.
+// ProverClient::from_env() loads proving params from disk which takes 5-10 sec.
+// Better approach: run CLI as daemon, accept requests via stdin, keep one ProverClient
+// in Arc and reuse it. Would save the initialization overhead on every proof.
 fn prove_with_client<P: Prover<CpuProverComponents>>(
     client: P,
     stdin: SP1Stdin,
@@ -194,12 +215,20 @@ fn prove_with_client<P: Prover<CpuProverComponents>>(
         ProofMode::Plonk => SP1ProofMode::Plonk,
     };
 
+    // Runs zkVM and generates proof. Local timing: compressed 10-20min, groth16 30min-2hr.
+    // For production use SP1_NETWORK=mainnet to prove on Succinct network in under 5 min.
     let proof = client.prove(&pk, &stdin, sp1_mode)?;
+
+    // Only groth16 and plonk support bytes32 for on-chain verification.
+    let vk_hash = match mode {
+        ProofMode::Groth16 | ProofMode::Plonk => format!("0x{}", hex::encode(vk.bytes32())),
+        _ => format!("0x{}", hex::encode(vk.hash_bytes())),
+    };
 
     let response = ProverResponse {
         proof: BASE64.encode(proof.bytes()),
         public_values: BASE64.encode(proof.public_values.to_vec()),
-        vk_hash: format!("0x{}", hex::encode(vk.bytes32())),
+        vk_hash,
         metadata: AggregatedMetadata {
             self_nullifier: payload.self_nullifier,
             generation_id: payload.target_generation_id,

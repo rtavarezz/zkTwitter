@@ -58,7 +58,7 @@ export default function SocialProof() {
       // Root represents snapshot of all verified users at this moment
       setProofSteps(prev => [...prev, '1. Fetching proof context...']);
       const context = await apiGet<SocialContext>('/social/context');
-      setProofSteps(prev => [...prev, `✓ Context loaded (need ${context.minVerifiedNeeded}+ verified follows)`]);
+      setProofSteps(prev => [...prev, `Done: Context loaded (need ${context.minVerifiedNeeded}+ verified follows)`]);
 
       // Step 2: Fetch Merkle proofs for user's verified followees
       // Backend sends: Poseidon(selfNullifier) leaves + sibling paths
@@ -66,11 +66,11 @@ export default function SocialProof() {
       // But it won't learn this from the proof - proof reveals nothing about identity
       setProofSteps(prev => [...prev, '2. Fetching Merkle proofs for your verified followees...']);
       const proofData = await apiGet<ProofData>('/social/proof-data');
-      setProofSteps(prev => [...prev, `✓ Found ${proofData.count} verified followees`]);
+      setProofSteps(prev => [...prev, `Done: Found ${proofData.count} verified followees`]);
 
       if (proofData.count < context.minVerifiedNeeded) {
         setError(`You need to follow at least ${context.minVerifiedNeeded} verified users. Currently: ${proofData.count}`);
-        setProofSteps(prev => [...prev, `✗ Insufficient verified follows (need ${context.minVerifiedNeeded}, have ${proofData.count})`]);
+        setProofSteps(prev => [...prev, `Error: Insufficient verified follows (need ${context.minVerifiedNeeded}, have ${proofData.count})`]);
         return;
       }
 
@@ -81,7 +81,7 @@ export default function SocialProof() {
       const wasmPath = '/circuits/socialProof.wasm';
       const zkeyPath = '/circuits/socialProof_final.zkey';
       const snarkjs = await import('snarkjs');
-      setProofSteps(prev => [...prev, '✓ Circuit loaded (159k constraints)']);
+      setProofSteps(prev => [...prev, 'Done: Circuit loaded (159k constraints)']);
 
       // Step 4: Prepare circuit inputs (pad to match circuit's fixed size)
       // Circuit expects exactly N_MAX followees (32), pad with zeros for unused slots
@@ -133,7 +133,7 @@ export default function SocialProof() {
         merklePathBits: paddedPathBits.map(path => path.map(String)), // PRIVATE (proof paths)
       };
 
-      setProofSteps(prev => [...prev, `✓ Circuit inputs ready (${proofData.count} followees, privacy preserved)`]);
+      setProofSteps(prev => [...prev, `Done: Circuit inputs ready (${proofData.count} followees, privacy preserved)`]);
 
       // Step 5: Run Groth16 prover locally
       // Circuit validates each followee leaf is in the Merkle tree
@@ -144,7 +144,7 @@ export default function SocialProof() {
         wasmPath,
         zkeyPath
       );
-      setProofSteps(prev => [...prev, '✓ ZK proof generated! Backend will never see who you follow.']);
+      setProofSteps(prev => [...prev, 'Done: ZK proof generated! Backend will never see who you follow.']);
 
       // Step 6: Send proof + public signals to backend
       // POST /social/verify
@@ -161,7 +161,7 @@ export default function SocialProof() {
         publicSignals,
       });
 
-      setProofSteps(prev => [...prev, '✓ Proof verified cryptographically']);
+      setProofSteps(prev => [...prev, 'Done: Proof verified cryptographically']);
 
       if (result.success || result === null) {
         // Step 7: Update local user context with social badge
@@ -182,7 +182,7 @@ export default function SocialProof() {
         }
 
         setSuccess(true);
-        setProofSteps(prev => [...prev, '✓ Complete! Your tweets now show your social badge.']);
+        setProofSteps(prev => [...prev, 'Done: Complete! Your tweets now show your social badge.']);
 
         // Redirect to timeline where badge now displays (e.g., "Social Verified (5+)")
         setTimeout(() => {
@@ -192,7 +192,7 @@ export default function SocialProof() {
     } catch (err) {
       console.error('Proof generation failed:', err);
       setError(err instanceof Error ? err.message : 'Failed to generate proof');
-      setProofSteps(prev => [...prev, `✗ Error: ${err instanceof Error ? err.message : 'Failed'}`]);
+      setProofSteps(prev => [...prev, `Error: Error: ${err instanceof Error ? err.message : 'Failed'}`]);
     } finally {
       setProving(false);
     }

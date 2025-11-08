@@ -161,14 +161,8 @@ Before persisting, backend should verify the SP1 proof:
 Add verification before the DB transaction in `/sp1/verify`.
 
 ### Get PROVE Tokens for Network Proving
-Local proving is slow. For production, use network proving:
-1. Generate an Ethereum keypair (`cast wallet new`).
-2. Get PROVE tokens on Ethereum mainnet (see Succinct docs).
-3. Deposit PROVE tokens at https://explorer.succinct.xyz.
-4. Export `NETWORK_PRIVATE_KEY` with your key.
-5. Set `SP1_NETWORK=mainnet` and `SP1_PROOF_MODE=compressed` or `groth16`.
-Costs depend on program complexity and market rates (see explorer).
-
+ ask team on this^
+ 
 ---
 
 ## Security Model

@@ -131,6 +131,7 @@ export default function Profile() {
   const countryFlag = getCountryFlag(disclosed.country)
   const socialProofLevel = profile.socialProofLevel ?? 0
   const socialBadgeLabel = socialProofLevel > 0 ? `Social Verified (${socialProofLevel}+)` : null
+  const hasSp1Proof = socialProofLevel > 0 && profile.socialVerifiedAt
 
   return (
     <div className="profile-app">
@@ -155,6 +156,7 @@ export default function Profile() {
               <p className="profile-subtitle">
                 {isHuman ? 'Verified' : profile.humanStatus === 'bot' ? 'Bot account' : 'Verification pending'}
                 {socialBadgeLabel ? ` • ${socialBadgeLabel}` : ''}
+                {hasSp1Proof ? ' • SP1' : ''}
               </p>
               <div className="profile-metadata">
                 <span><strong>{profile.social.followerCount}</strong> Followers</span>
@@ -218,6 +220,16 @@ export default function Profile() {
                   </p>
                 </div>
               </li>
+              {hasSp1Proof && (
+                <li>
+                  <div>
+                    <strong>SP1 Aggregated Proof</strong>
+                    <p style={{ color: '#10b981' }}>
+                      Generation + Social proofs aggregated via SP1 zkVM
+                    </p>
+                  </div>
+                </li>
+              )}
             </ul>
           </div>
         </section>

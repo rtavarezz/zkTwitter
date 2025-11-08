@@ -51,6 +51,9 @@ async function ensureCliPath(): Promise<string> {
   return cliPath;
 }
 
+// Aggregates generation and social Groth16 proofs into single SP1 proof.
+// zkVM validates structure and binds to selfNullifier plus sessionNonce.
+// In groth16 mode output is verifiable on-chain for around 270k gas.
 export async function runSp1Aggregator(payload: AggregationPayload): Promise<Sp1ProofArtifact> {
   logger.info('[SP1 STEP 1] Checking SP1 CLI availability');
   const cliPath = await ensureCliPath();
@@ -62,15 +65,16 @@ export async function runSp1Aggregator(payload: AggregationPayload): Promise<Sp1
   logger.info({ inputPath }, '[SP1 STEP 2] Workspace created');
 
   logger.info('[SP1 STEP 3] Serializing Groth16 proofs for zkVM consumption');
-  // Convert to format expected by Rust CLI
+  // zkVM expects proofs as JSON strings. Stringify proof objects but keep
+  // publicSignals as string arrays for easier extraction in Rust.
   const serializedPayload = {
     generation: {
       proof: JSON.stringify(payload.generation.proof),
-      publicSignals: payload.generation.publicSignals, // Keep camelCase for CLI extraction
+      publicSignals: payload.generation.publicSignals,
     },
     social: {
       proof: JSON.stringify(payload.social.proof),
-      publicSignals: payload.social.publicSignals, // Keep camelCase for CLI extraction
+      publicSignals: payload.social.publicSignals,
     },
     session_nonce: payload.sessionNonce,
     verified_root: payload.verifiedRoot,
@@ -84,18 +88,27 @@ export async function runSp1Aggregator(payload: AggregationPayload): Promise<Sp1
   logger.info('[SP1 STEP 3] Payload serialized and written to disk');
 
   logger.info('[SP1 STEP 4] Building CLI arguments');
-  const args = ['prove', inputPath];
-  const network = process.env.SP1_NETWORK;
-  if (network) {
-    args.push('--network', network);
-  }
-  const proofMode = process.env.SP1_PROOF_MODE;
-  if (proofMode) {
+  const proofMode = process.env.SP1_PROOF_MODE || 'compressed';
+
+  // SP1 recommended workflow: execute mode for dev, compressed for testing, groth16 for production.
+  // Execute runs zkVM without proof generation, under 1 sec.
+  const isExecuteMode = proofMode === 'execute';
+  const args = isExecuteMode ? ['execute', inputPath] : ['prove', inputPath];
+
+  if (!isExecuteMode) {
+    const network = process.env.SP1_NETWORK;
+    if (network) {
+      args.push('--network', network);
+    }
     args.push('--proof', proofMode);
   }
-  logger.info({ args, network, proofMode }, '[SP1 STEP 4] CLI arguments prepared');
 
-  logger.info('[SP1 STEP 5] Spawning SP1 prover (this may take several minutes depending on mode/network)');
+  logger.info({ args, mode: proofMode }, '[SP1 STEP 4] CLI arguments prepared');
+
+  // Timing per SP1 docs: execute under 1sec, compressed 10-20min, groth16 30min-2hr on local.
+  const expectedTime = isExecuteMode ? '<1 sec' : '5-120 min';
+  logger.info({ mode: proofMode }, `[SP1 STEP 5] Spawning SP1 (expected time: ${expectedTime})`);
+
   const child = spawn(cliPath, args, {
     stdio: ['ignore', 'pipe', 'inherit'],
     env: process.env,
@@ -106,7 +119,13 @@ export async function runSp1Aggregator(payload: AggregationPayload): Promise<Sp1
     stdout += chunk.toString();
   });
 
+  // Log progress every 30 seconds so we know it's still running
+  const progressInterval = setInterval(() => {
+    logger.info('[SP1 PROGRESS] Still proving... (this can take 5-120 min for local proving)');
+  }, 30000);
+
   const [code] = (await once(child, 'close')) as [number];
+  clearInterval(progressInterval);
   logger.info({ exitCode: code }, '[SP1 STEP 6] Prover process completed');
 
   await fs.rm(workDir, { recursive: true, force: true });
